@@ -177,8 +177,8 @@
    yfinance/FRED calls. `slug` (from `forms.slug_target`) makes the id
    valid even for symbols like `GC=F`/`^VIX` that aren't valid HTML ids
    as-is. #}
-{% macro asset_panel(symbol, label, slug, note='', href='') %}
-<div class="card asset-panel" id="asset-{{ slug }}" data-symbol="{{ symbol }}">
+{% macro asset_panel(symbol, label, slug, note='', href='', events=false) %}
+<div class="card asset-panel" id="asset-{{ slug }}" data-symbol="{{ symbol }}"{% if events %} data-events="1"{% endif %}>
   <h2 title="{{ symbol }}">{% if href %}<a href="{{ href }}">{{ symbol | iname }}</a>{% else %}{{ symbol | iname }}{% endif %}{% if note %} <span class="tag">{{ note }}</span>{% endif %}</h2>
   <div class="asset-panel-body" data-state="loading">
     <div class="skeleton-line sk-100 sk-gap"></div>
@@ -192,6 +192,15 @@
 {# Bloc chargé après l'affichage de la page : `static/lazy.js` récupère le fragment HTML à `url` et le pose ici. Le cadre de
    la page (titre, onglets, chiffres d'en-tête) apparaît tout de suite ; seul le gros tableau attend. `lines` = nombre de barres
    d'attente. #}
+{# Date relative (D18, 24/11) : `value` = horodatage UTC « AAAA-MM-JJ HH:MM:SS » (SQLite datetime('now')) ou ISO. Sans JavaScript, la date
+   exacte reste affichée ; shell.js la remplace par « il y a 3 h » / « dans 2 j » et met la date exacte locale au survol. #}
+{% macro rel_time(value) -%}
+{%- if value -%}
+{%- set iso = (value | string).replace(' ', 'T') -%}
+<time class="rel-time" datetime="{{ iso }}{{ '' if ('Z' in iso or '+' in iso[10:]) else 'Z' }}" title="{{ value }} UTC">{{ value }}</time>
+{%- else -%}—{%- endif -%}
+{%- endmacro %}
+
 {% macro lazy_block(url, lines=6, label=none, retry=none) %}
 {% set label = label if label is not none else (ui_t('sb_loading') if ui_t is defined else 'Loading…') %}
 {% set retry = retry if retry is not none else (ui_t('lazy_retry') if ui_t is defined else 'Retry') %}

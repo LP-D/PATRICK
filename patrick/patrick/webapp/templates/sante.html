@@ -39,6 +39,26 @@
   </div>
 </section>
 
+{# Dernière tâche de nuit (D28, `system/night_status.py`) : chaque étape et son code de sortie ; la puce « nuit » de la barre y mène. #}
+<section class="card" id="nuit">
+  {% set nstat = {'ok': 'done', 'partial': 'warning', 'failed': 'error', 'missed': 'error', 'running': 'running', 'unknown': 'pending'}[night.status] %}
+  <h2>{{ t('hl_night_title') }} <span class="status-badge status-{{ nstat }}">{{ t('hl_night_' ~ night.status) }}</span></h2>
+  {% if night.started %}<p class="hint">{{ t('hl_night_when', start=night.started | replace('T', ' '), end=(night.ended | replace('T', ' ')) if night.ended else '—') }}</p>{% endif %}
+  {% if night.steps %}
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>{{ t('hl_night_step') }}</th><th class="n">{{ t('hl_night_code') }}</th></tr></thead>
+      <tbody>
+        {% for s in night.steps %}
+        <tr><td>{{ s.name }}</td><td class="n pk-mono{{ ' neg' if s.code not in (0, none) and 'predictions' not in s.name else '' }}">{{ s.code if s.code is not none else '…' }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="hint">{{ t('hl_night_hint') }}</p>
+  {% endif %}
+</section>
+
 <section class="card">
   <h2>{{ t('hl_s_reports') }} <span class="hint">({{ reports | length }})</span></h2>
   <p class="hint">{{ t('hl_reports_hint') }}</p>

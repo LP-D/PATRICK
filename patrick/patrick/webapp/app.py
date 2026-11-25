@@ -1102,6 +1102,13 @@ def relaunch_run(run_id: str):
     return RedirectResponse(f"/runs/{job_view['id']}", status_code=303)
 
 
+@app.get("/api/night-status")
+def night_status_api():
+    """État de la dernière tâche de nuit (D21) : la barre du haut ne montre une puce que si elle a échoué, été partielle ou manquée."""
+    from patrick.system import night_status
+    return night_status.night_status()
+
+
 @app.get("/api/run-state")
 def run_state():
     """Lightweight aggregated state (active run + queue) — periodic JS-side
@@ -2219,6 +2226,34 @@ def _asset_overview_from_snapshot(symbol: str) -> dict | None:
     return None
 
 
+@app.get("/fragments/pooled-heatmap")
+def pooled_heatmap_fragment(request: Request):
+    """Carte de chaleur cible x horizon de l'AUC regroupée (D10), sur la Synthèse : où est le signal, en un coup d'oeil."""
+    from patrick.tracking import pooled_signal
+    conn = trackdb.connect()
+    try:
+        grid = pooled_signal.heatmap(pooled_signal.load(conn))
+    finally:
+        conn.close()
+    return templates.TemplateResponse(request, "_pooled_heatmap.html", {**_i18n_context(request), "grid": grid})
+
+
+@app.get("/fragments/champion-history/{symbol}")
+def champion_history_fragment(request: Request, symbol: str):
+    """Frise des champions d'un actif (D26) : qui a tenu le titre à chaque horizon, de quand à quand. Chargé après l'affichage."""
+    from patrick.tracking import champion_history
+    if symbol not in forms.TARGET_SOURCE_BY_SYMBOL:
+        raise HTTPException(status_code=404, detail="Cible inconnue")
+    conn = trackdb.connect()
+    try:
+        by_horizon = champion_history.history(conn, symbol)
+    finally:
+        conn.close()
+    longest = max((r["days"] or 0 for reigns in by_horizon.values() for r in reigns), default=0)
+    return templates.TemplateResponse(request, "_champion_history.html",
+                                      {**_i18n_context(request), "by_horizon": by_horizon, "longest": max(longest, 1)})
+
+
 @app.get("/fragments/asset-signals/{symbol}")
 def asset_signals_fragment(request: Request, symbol: str, dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA):
     """Fiche d'un actif : ses signaux du jour, un par horizon (même cellule et même bulle que `/predictions`), avec le champion de
@@ -2607,8 +2642,11 @@ def asset_stats_api(
     zscore_window: int = asset_stats.ZSCORE_WINDOW,
     ma_windows: str | None = None,
     long_windows_bars: str | None = None,
+    events: bool = False,
 ):
-    """feature/ticker-stats-panel: fetched client-side, once per panel, by
+    """`events=1` (page d'un actif, D3) : ajoute les changements de champion et les publications de résultats à poser sur la courbe.
+
+    feature/ticker-stats-panel: fetched client-side, once per panel, by
     `asset_stats.js`. Same data-access path as `/api/preview/{symbol}`
     (`forms.TARGET_SOURCE_BY_SYMBOL` -> `market_data.price_history`) --
     `asset_stats.compute_stats` only adds the display-stats layer on top,
@@ -2653,12 +2691,20 @@ def asset_stats_api(
         if fred_periodicity(symbol) in ("monthly", "quarterly"):
             period = "max"
     series = market_data.price_history(symbol, source, period)
-    return asset_stats.compute_stats(
+    stats = asset_stats.compute_stats(
         series,
         zscore_window=zscore_window,
         ma_windows=ma_windows_list,
         long_windows_bars=long_windows_list,
     )
+    if events:
+        from patrick.tracking import asset_events
+        conn = trackdb.connect()
+        try:
+            stats["events"] = asset_events.events(conn, symbol)
+        finally:
+            conn.close()
+    return stats
 
 
 @app.get("/targets/{ticker}")

@@ -279,9 +279,10 @@ def register(app: FastAPI, templates, context) -> None:
         text = weekly_report.read(name) if name else None
         if name and text is None:
             raise HTTPException(status_code=404, detail="Rapport introuvable")
+        from patrick.system import night_status
         return templates.TemplateResponse(request, "sante.html", {
             **context(request), "checks": items, "overall": health.overall(items), "reports": weekly_report.list_reports(),
-            "report_name": name, "report_text": text})
+            "report_name": name, "report_text": text, "night": night_status.night_status()})
 
     @app.get("/sante", response_class=HTMLResponse)
     def health_page(request: Request):

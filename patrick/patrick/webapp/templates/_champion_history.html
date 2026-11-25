@@ -1,0 +1,19 @@
+{# Frise des champions d'un actif (D26, `tracking/champion_history.py`) : un règne par ligne, barre proportionnelle à sa durée. #}
+{% from "_components.html" import empty_state %}
+{% if not by_horizon %}
+<p class="hint">{{ t('ch_none') }}</p>
+{% else %}
+{% for horizon, reigns in by_horizon.items() %}
+<h3 class="ch-h">{{ horizon | hlabel }} <span class="hint">· {{ t('ch_n_reigns', n=reigns | length) }}</span></h3>
+<ol class="ch-list">
+  {% for r in reigns | reverse %}
+  <li class="ch-reign{{ ' is-current' if r.current else '' }}">
+    <span class="ch-bar" style="--w: {{ (100 * (r.days or 0) / longest) | round(1) }}%" aria-hidden="true"></span>
+    <span class="ch-text"><a href="/runs/{{ r.run_id | urlencode }}/analyse" class="pk-mono">{{ r.algo or r.run_id }}</a>
+      · {{ r.start or '?' }} → {{ r.end if r.end else t('ch_current') }}{% if r.days is not none %} · {{ t('ch_days', n=r.days) }}{% endif %}
+      {% if r.lost_by %}<span class="hint"> · {{ t('ch_lost_by') }} {{ r.lost_by }}</span>{% endif %}</span>
+  </li>
+  {% endfor %}
+</ol>
+{% endfor %}
+{% endif %}

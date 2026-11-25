@@ -2434,7 +2434,42 @@ dialog.modal h2 { margin: 0 0 16px; font-size: var(--fs-lg); font-weight: 650; }
   .sidebar, .topbar, .ticker, .cmdk, .launch-bar { display: none !important; }
   .app-shell { display: block; }
   .card, .metric { box-shadow: none; animation: none; break-inside: avoid; }
+  /* D30 (24/11) : papier blanc, texte noir, rien d'interactif, tableaux qui se coupent entre deux lignes, titres jamais seuls en bas de page */
+  :root { color-scheme: light; }
+  html, body, .main, .card, .metric { background: #fff !important; color: #000 !important; }
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+  button, .btn, .help-q, .help-pop, .popover, .glossary-popover, [role="tooltip"], .lazy-skeleton, .skip-link, .ra-png { display: none !important; }
+  a { color: inherit !important; text-decoration: underline; }
+  h1, h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
+  table { break-inside: auto; }
+  tr, figure, svg, .chart { break-inside: avoid; page-break-inside: avoid; }
+  thead { display: table-header-group; }                  /* en-tête répété sur chaque page */
+  .table-scroll, .table-wrap { overflow: visible !important; max-height: none !important; }
+  .table-scroll th { position: static; }
+  svg, img, canvas { max-width: 100% !important; height: auto; }
+  @page { margin: 14mm; }
 }
+
+.fund-compare { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: var(--fs-xs); color: var(--text-2); }
+
+/* D10 : carte de chaleur de l'AUC regroupée (--heat de 0 à 1, contour = significatif après BH) */
+.ph-cell { background: color-mix(in srgb, var(--brand) calc(var(--heat, 0) * 55%), transparent); font-variant-numeric: tabular-nums; }
+.ph-cell.is-sig { outline: 2px solid var(--pos); outline-offset: -2px; font-weight: 600; }
+.ph-cell.is-empty { color: var(--text-3); }
+
+/* D27 : frise de la file d'attente (segments proportionnels à la durée estimée) */
+.queue-frise { display: flex; gap: 2px; height: 10px; margin: 8px 0 4px; border-radius: var(--radius-pill); overflow: hidden; }
+.queue-seg { flex: none; background: color-mix(in srgb, var(--brand) 45%, transparent); }
+.queue-seg.is-active { background: var(--brand); }
+.queue-seg.is-unknown { background: repeating-linear-gradient(45deg, var(--line), var(--line) 3px, transparent 3px, transparent 6px); }
+
+/* D26 : frise des champions d'un actif (une ligne par règne, barre proportionnelle à sa durée) */
+.ch-h { margin: 12px 0 6px; font-size: var(--fs-sm); }
+.ch-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.ch-reign { position: relative; padding: 4px 8px; border-radius: var(--radius); font-size: var(--fs-xs); overflow: hidden; }
+.ch-bar { position: absolute; inset: 0 auto 0 0; width: var(--w, 0%); background: color-mix(in srgb, var(--text-3) 18%, transparent); }
+.ch-reign.is-current .ch-bar { background: color-mix(in srgb, var(--brand) 22%, transparent); }
+.ch-text { position: relative; }
 
 /* ============ Utility (last: state class must win the cascade) ============ */
 
@@ -3759,6 +3794,8 @@ html[data-sidebar="collapsed"] .sidebar-pins { display: none; }
 .machine-chip:hover { color: var(--text); border-color: var(--line-strong); }
 .machine-chip .icon { flex: none; color: var(--pos); }
 .machine-chip.is-paused .icon { color: var(--warn); }
+.night-chip .icon { color: var(--warn); }                     /* D21 : nuit partielle */
+.night-chip.is-alert .icon { color: var(--neg); }              /* fonds non faits, ou nuit manquée */
 /* Comme le libellé de la loupe : une ligne visible, repliée plutôt qu'insécable, pour que la puce rétrécisse avant le fil. */
 .machine-chip-text {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1;

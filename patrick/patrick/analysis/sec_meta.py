@@ -15,7 +15,7 @@ from patrick.analysis import frames
 from patrick.analysis import stats_core as sc
 from patrick.analysis.context import Ctx, iso
 from patrick.analysis.sec_predict import _scores
-from patrick.validation import calibration_drift, winner_bias
+from patrick.validation import calibration_drift, suspicion, winner_bias
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +63,21 @@ def overview(ctx: Ctx) -> dict:
     if len(live) and hold.get("brier") is not None:
         calib = calibration_drift.calibration_drift(live["p_up"].to_numpy(dtype=float), (live["ut"].to_numpy(dtype=float) >= 0.5).astype(float),
                                                     hold.get("brier"), fr.horizon)
+    notes = list(fr.notes)
+    if suspicion.pre_leak_guard_notice(cfg):
+        notes.append(suspicion.PRE_LEAK_GUARD_NOTICE)
+    if winner and winner["n_readers"] > 1:
+        code = "winner_bias" if winner["beats_chance"] else "winner_bias_chance"
+        notes.append(f"{code}:{winner['auc']:.3f}|{winner['adjusted']:.3f}|{winner['n_readers']}")
+    if calib and calib["degraded"]:
+        notes.append(f"calibration_drift:{calib['holdout_brier']:.4f}|{calib['live_brier']:.4f}|{calib['n_live']}")
     return {"winner_bias": winner, "calibration_drift": calib, "run": {**{k: run[k] for k in ("run_id", "target", "horizon", "status", "started_at", "finished_at", "snapshot_id",
                                            "config_hash", "git_sha", "seed", "n_trials")}, "name": _run_name(cfg, run)},
             "trial": {"trial_id": trial["trial_id"], "algo": trial["algo"], "sampler": trial["sampler"], "n_features": trial["n_features"],
                       "selector": trial["selector"], "regime": trial["regime"], "category": trial.get("category"), "params": params,
                       "is_best": trial.get("is_best")},
             "scheme": val.get("scheme", "walkforward"), "splits": frames.quick_split_counts(d), "headline": heads,
-            "has_levels": fr.levels is not None, "is_alpha": fr.is_alpha, "notes": fr.notes,
+            "has_levels": fr.levels is not None, "is_alpha": fr.is_alpha, "notes": notes,
             "cumulative_trials": trackstats.count_cumulative_trials(conn, run["target"], fr.horizon),
             "holdout_reads": reads, "siblings": siblings,
             "levels_range": [iso(fr.levels.index[0]), iso(fr.levels.index[-1])] if fr.levels is not None else None}

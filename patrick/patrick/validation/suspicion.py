@@ -115,3 +115,21 @@ def suspect_reason(metrics: dict | None) -> str | None:
     if auc_dir is not None and auc_dir >= SUSPECT_AUC:
         return f"AUC_dir {auc_dir:.2f} ≥ {SUSPECT_AUC:.2f}"
     return None
+
+
+PRE_LEAK_GUARD_NOTICE = "pre_leak_guard"
+
+
+def pre_leak_guard_notice(config: dict | None) -> str | None:
+    """`PRE_LEAK_GUARD_NOTICE` pour un run entraîné avant le garde anti-fuite du 09/10/2026 (`data/alignment.py`, alignement version 0
+    ou absent) : ses séries FRED publiées en retard pouvaient être alignées sur leur date de référence. Ce n'est PAS un motif d'exclusion
+    (un score plausible n'est pas une preuve de fuite, et exclure tous ces runs viderait les fonds d'un coup) : un signalement visible."""
+    if not isinstance(config, dict):
+        return None
+    objective = config.get("objective") if isinstance(config.get("objective"), dict) else {}
+    alignment = objective.get("alignment")
+    version = alignment.get("version", 0) if isinstance(alignment, dict) else 0
+    if isinstance(version, int) and not isinstance(version, bool) and version >= 1:
+        return None
+    return PRE_LEAK_GUARD_NOTICE
+

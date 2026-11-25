@@ -1,7 +1,7 @@
 {# Fragment (sans base) : une section du panneau latéral de /runs. `name` et
    `target` sont déjà échappés à la source (`tracking/db.py::list_all_runs`),
    d'où `| safe` -- sinon double échappement. #}
-{% from "_components.html" import fold_metrics_table, headline_metrics %}
+{% from "_components.html" import fold_metrics_table, headline_metrics, rel_time %}
 {% set mcc = r.panel.MCC_4cls if r.panel else none %}
 {% set has_gap = mcc is not none and r.benchmark_mcc is not none %}
 <header class="rp-head">
@@ -29,7 +29,7 @@
     <div><dt>{{ t('rp_dm') }}</dt><dd class="pk-mono">{{ '%.4f' | format(r.dm_p_value) if r.dm_p_value is not none else '—' }}{% if r.dm_sample == 'last_wf_fold' and r.dm_p_value is not none %} <span class="tag" title="{{ t('rp_dm_biased') }}">{{ t('rp_dm_biased_tag') }}</span>{% endif %}</dd></div>
     <div><dt>{{ t('rp_trials') }}</dt><dd class="pk-mono">{{ r.n_trials if r.n_trials is not none else '—' }}</dd></div>
     <div><dt>{{ t('rp_duration') }}</dt><dd class="pk-mono">{{ '%d min %02d s' | format(duration_s // 60, duration_s % 60) if duration_s is not none else '—' }}</dd></div>
-    <div><dt>{{ t('hist_started') }}</dt><dd>{{ r.started_at or '—' }}</dd></div>
+    <div><dt>{{ t('hist_started') }}</dt><dd>{{ rel_time(r.started_at) }}</dd></div>
     <div><dt>{{ t('rp_horizons') }}</dt><dd>{{ horizons | map('hlabel') | join(', ') }}</dd></div>
     <div class="rp-wide"><dt>{{ t('rp_algos') }}</dt><dd>{{ algorithms | join(', ') or '—' }}</dd></div>
     <div class="rp-wide"><dt>{{ t('rp_samplers') }}</dt><dd>{{ samplers | join(', ') or '—' }}</dd></div>

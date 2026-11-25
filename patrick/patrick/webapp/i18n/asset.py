@@ -18,6 +18,12 @@ ASSET_STRINGS: dict[str, dict[str, str]] = {
     # --- sections
     "as_market_h": _s("Marché", "Market"),
     "as_signals_h": _s("Signaux par horizon", "Signals by horizon"),
+    "ch_title": _s("Champions successifs", "Successive champions"),
+    "ch_none": _s("Aucun champion pour cet actif.", "No champion for this asset."),
+    "ch_n_reigns": _s("{n} règne(s)", "{n} reign(s)"),
+    "ch_current": _s("en titre", "current"),
+    "ch_days": _s("{n} j", "{n} d"),
+    "ch_lost_by": _s("détrôné :", "dethroned:"),
     "as_news_h": _s("Actualités", "News"),
     "as_funds_h": _s("Dans les fonds", "In the funds"),
     "as_runs_h": _s("Entraînements", "Training runs"),

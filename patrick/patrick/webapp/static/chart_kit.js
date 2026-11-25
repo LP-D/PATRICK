@@ -195,7 +195,34 @@
         reset: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
         left: '<path d="m15 18-6-6 6-6"/>',
         right: '<path d="m9 18 6-6-6-6"/>',
+        png: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
+        csv: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
     };
+
+    // D23 (24/11) : données d'un graphique en CSV -- une ligne par abscisse (union des séries), une colonne par série ; dates ISO sur un
+    // axe du temps, point décimal (lisible par Excel en anglais comme par pandas), cellule vide quand une série n'a pas de valeur.
+    function seriesCsv(series, timeAxis, labels) {
+        function cell(v) { var t = String(v); return /[",\n;]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }
+        var xs = [], seen = {};
+        series.forEach(function (sr) { sr.xs.forEach(function (x) { if (!seen[x]) { seen[x] = true; xs.push(x); } }); });
+        xs.sort(function (a, b) { return a - b; });
+        var head = [timeAxis ? "date" : "x"].concat(series.map(function (sr, i) { return sr.name || ("serie_" + (i + 1)); }));
+        var lookup = series.map(function (sr) { var m = {}; sr.xs.forEach(function (x, i) { m[x] = sr.ys[i]; }); return m; });
+        var rows = [head.map(cell).join(",")];
+        xs.forEach(function (x) {
+            var first = timeAxis ? new Date(x).toISOString().slice(0, 10) : (labels && labels[x] !== undefined ? labels[x] : x);
+            rows.push([cell(first)].concat(lookup.map(function (m) {
+                var v = m[x]; return v === null || v === undefined || !isFinite(v) ? "" : String(v);
+            })).join(","));
+        });
+        return rows.join("\n") + "\n";
+    }
+    function downloadBlob(blob, name) {
+        var a = root.document.createElement("a");
+        a.href = URL.createObjectURL(blob); a.download = name;
+        root.document.body.appendChild(a); a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+    }
     function iconBtn(kind, label) {
         var b = el("button", "pp-btn", { type: "button", "aria-label": label, title: label });
         b.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + ICONS[kind] + "</svg>";
@@ -231,6 +258,15 @@
         if (o.zoomable) {
             tools.appendChild(el("span", "pp-hint", { text: tr("chart_hint", "Drag to zoom · double-click to reset") }));
             tools.appendChild(bOut); tools.appendChild(bIn); tools.appendChild(bReset);
+        }
+        if (o.exportable !== false && !o.compact) {      // D23 : l'image telle qu'affichée, et les données en CSV (pas sur une vignette)
+            var fileBase = String(o.exportName || o.title || "graphique").replace(/[^\w\-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60) || "graphique";
+            var bPng = iconBtn("png", tr("chart_export_png", "Image (PNG)")), bCsv = iconBtn("csv", tr("chart_export_csv", "Data (CSV)"));
+            bPng.addEventListener("click", function () { base.toBlob(function (b) { if (b) downloadBlob(b, fileBase + ".png"); }); });
+            bCsv.addEventListener("click", function () {
+                downloadBlob(new Blob(["\ufeff" + seriesCsv(series, timeAxis, o.labels)], { type: "text/csv;charset=utf-8" }), fileBase + ".csv");
+            });
+            tools.appendChild(bPng); tools.appendChild(bCsv);
         }
         stage.appendChild(base); stage.appendChild(over); stage.appendChild(tip); stage.appendChild(tools);
         var legend = el("div", "pp-legend");
@@ -434,7 +470,7 @@
                 });
                 lastTags.sort(function (a, b) { return a.y - b.y; });
                 for (var q = 1; q < lastTags.length; q++) if (lastTags[q].ty === undefined && lastTags[q].y - (lastTags[q - 1].ty !== undefined ? lastTags[q - 1].ty : lastTags[q - 1].y) < 19) lastTags[q].ty = (lastTags[q - 1].ty !== undefined ? lastTags[q - 1].ty : lastTags[q - 1].y) + 19;
-                lastTags.forEach(function (tg) { chip(ctx, (o.tipFmt || valFmt)(tg.v), W - padR + 3, tg.ty !== undefined ? tg.ty : tg.y, tg.col, inkFor(tg.col), "left"); });
+                lastTags.forEach(function (tg) { chip(ctx, (o.tipFmt || o.yFmt || valFmt)(tg.v), W - padR + 3, tg.ty !== undefined ? tg.ty : tg.y, tg.col, inkFor(tg.col), "left"); });
             }
             geo = { padL: padL, padR: padR, padT: padT, pw: pw, ph: ph, hit: fullH, X: X, Y: Y, vx0: vx0, vx1: vx1, lo: lo, hi: hi, yFmt: yFmt, ch: ch, trendCol: trendCol, candle: candle, vol: volOn };
             setAria(ye);
@@ -924,7 +960,7 @@
         });
     }
 
-    var api = { create: create, parseDate: parseDate, _internals: { visibleMarkers: visibleMarkers, peersOf: peersOf, lowerBound: lowerBound, nearestIndex: nearestIndex, niceTicks: niceTicks, decimalsFor: decimalsFor, timeTicks: timeTicks, decimate: decimate, yExtent: yExtent, withAlpha: withAlpha, windowChange: windowChange, candleExtent: candleExtent, yearStart: yearStart } };
+    var api = { create: create, parseDate: parseDate, _internals: { visibleMarkers: visibleMarkers, peersOf: peersOf, lowerBound: lowerBound, nearestIndex: nearestIndex, niceTicks: niceTicks, decimalsFor: decimalsFor, timeTicks: timeTicks, decimate: decimate, yExtent: yExtent, withAlpha: withAlpha, windowChange: windowChange, candleExtent: candleExtent, yearStart: yearStart, seriesCsv: seriesCsv } };
     if (typeof module !== "undefined" && module.exports) module.exports = api;
     root.PatrickPlot = api;
 })(typeof window !== "undefined" ? window : globalThis);

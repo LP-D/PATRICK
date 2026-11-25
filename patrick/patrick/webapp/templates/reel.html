@@ -46,6 +46,19 @@
 {{ block(t('lb_s_horizon'), t('lb_h_horizon'), board.by_horizon, t('lb_c_horizon'), horizon_label) }}
 {{ block(t('lb_s_algo'), t('lb_h_algo'), board.by_algo, t('lb_c_algo'), plain) }}
 
+{# D29 : écart réel / holdout par champion, le réel le plus en dessous d'abord. #}
+<section class="card" id="ecarts">
+  <h2>{{ t('lb_s_gap') }} <span class="hint">({{ board.gaps | length }})</span></h2>
+  <p class="hint">{{ t('lb_h_gap') }}</p>
+  {% set ns = namespace(out=[]) %}
+  {% for r in board.gaps %}
+    {% set ns.out = ns.out + [[r.target | iname ~ ' · ' ~ t('lb_horizon_days', h=r.horizon), r.algo, r.n, pct(r.live_rate), pct(r.holdout_rate),
+                               pts(r.gap) ~ (' *' if r.significant else '')]] %}
+  {% endfor %}
+  {{ data_table([t('lb_c_model'), t('lb_c_algo'), t('lb_c_n'), t('lb_c_live'), t('lb_c_holdout'), t('lb_c_gap')], ns.out,
+                empty_message=t('lb_too_few'), num_cols=[2, 3, 4, 5], collapse_after=12) }}
+</section>
+
 <section class="card">
   <h2>{{ t('lb_s_bias') }}</h2>
   <p class="hint">{{ t('lb_h_bias') }}</p>

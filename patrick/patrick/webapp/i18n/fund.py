@@ -169,6 +169,10 @@ FUND_STRINGS: dict[str, dict[str, str]] = {
     "fund_chart_title": _s("Évolution de la valeur", "Value over time"),
     "fund_chart_nav": _s("Valeur", "Value"),
     "fund_chart_capital": _s("Capital de départ", "Starting capital"),
+    "fund_chart_drawdown": _s("Perte depuis le plus haut", "Drawdown from the peak"),
+    "fund_compare": _s("Comparer avec", "Compare with"),
+    "fund_compare_none": _s("aucun fonds", "no fund"),
+    "fund_chart_rebased": _s("base 100 au premier jour commun", "base 100 on the first common day"),
 
     # positions
     "fund_pos_title": _s("Positions ouvertes", "Open positions"),

@@ -33,6 +33,11 @@ UI_STRINGS: dict[str, dict[str, str]] = {
     "recent_title": _s("Pages récentes", "Recent pages"),
     "chip_queue": _s("file {n}", "queue {n}"),
     "chip_title": _s("Machine d'entraînement : run en cours, file d'attente et temps pour tout finir", "Training machine: current run, queue and time to finish everything"),
+    "night_chip_failed": _s("Nuit : fonds non faits", "Night: funds not done"),
+    "night_chip_partial": _s("Nuit : partielle", "Night: partial"),
+    "night_chip_missed": _s("Nuit : manquée", "Night: missed"),
+    "night_chip_title": _s("Dernière tâche de nuit commencée le {start} ; étapes en échec : {steps}", "Last night task started {start}; failed steps: {steps}"),
+    "night_chip_none": _s("aucune", "none"),
     "kbd_title": _s("Raccourcis clavier", "Keyboard shortcuts"),
     "kbd_search": _s("Chercher une page ou un actif", "Search a page or an asset"),
     "kbd_pin": _s("Épingler la page (ou la retirer)", "Pin the page (or unpin it)"),
@@ -117,4 +122,5 @@ UI_STRINGS: dict[str, dict[str, str]] = {
 }
 
 UI_JS_KEYS: tuple[str, ...] = (*(k for k in UI_STRINGS if k.startswith("js_")), "day_suffix", "pin_add", "pin_remove", "pins_title", "recent_title",
-                               "chip_queue", "chip_title")
+                               "chip_queue", "chip_title", "night_chip_failed", "night_chip_partial", "night_chip_missed",
+                               "night_chip_title", "night_chip_none")

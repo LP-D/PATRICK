@@ -108,3 +108,22 @@ def test_the_page_renders_empty_and_with_results_and_is_in_the_navigation(tmp_pa
     assert "Actions US" in page.text and "2026-01-05" in page.text
     assert " – " in page.text                                        # l'intervalle ne se coupe pas sur deux lignes
     assert client.get("/reel", headers={"Accept-Language": "en"}).status_code == 200
+
+
+def test_each_champion_gets_its_live_versus_holdout_gap_worst_first(conn, world):
+    """D29 : 40 jugements réels à 25 % contre un holdout à 80 % : écart de -55 points, hors de l'intervalle du réel (marqué significatif).
+    Un champion bien aligné (réel 75 % contre holdout 75 %) vient après, sans marque."""
+    bad, good = world.cell("AAPL", 1, live=None), world.cell("MSFT", 1, live=None)
+    days = DAYS + [f"2026-02-{d:02d}" for d in range(16, 28)]
+    _live(conn, bad, [(day, 0, 1.0 if i % 4 else 0.0, 0.4) for i, day in enumerate(days)][:40])
+    _live(conn, good, [(day, 3, 1.0 if i % 4 else 0.0, 0.6) for i, day in enumerate(days)][:40])
+    conn.executemany("INSERT INTO prediction (trial_id, ts, split, y_true, y_pred) VALUES (?, ?, 'holdout', ?, ?)",
+                     [(bad, f"2025-0{1 + i // 28}-{i % 28 + 1:02d}", 3, 3 if i < 80 else 0) for i in range(100)]
+                     + [(good, f"2025-0{1 + i // 28}-{i % 28 + 1:02d}", 3 if i % 4 else 0, 3) for i in range(100)])
+    conn.commit()
+
+    gaps = live_board.board(conn, TODAY)["gaps"]
+
+    assert [g["target"] for g in gaps] == ["AAPL", "MSFT"]
+    assert gaps[0]["live_rate"] == 0.25 and gaps[0]["holdout_rate"] == 0.8 and gaps[0]["gap"] == pytest.approx(-0.55)
+    assert gaps[0]["significant"] is True and gaps[1]["gap"] == pytest.approx(0.0) and gaps[1]["significant"] is False

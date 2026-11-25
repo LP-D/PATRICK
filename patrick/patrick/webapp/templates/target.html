@@ -25,13 +25,14 @@
     <a href="#marche">{{ t('as_market_h') }}</a>
     {% if fiche.context %}<a href="#contexte">{{ t('eq_context_h') }}</a>{% endif %}
     <a href="#signaux">{{ t('as_signals_h') }}</a>
+    <a href="#champions">{{ t('ch_title') }}</a>
     <a href="#actualites">{{ t('as_news_h') }}</a>
     <a href="#fonds">{{ t('as_funds_h') }}</a>
     <a href="#entrainements">{{ t('as_runs_h') }}</a>
 </nav>
 
 {# Cours, graphique zoomable et statistiques : le même panneau que les pages de classes d'actifs (asset_stats.js), rempli après l'affichage. #}
-<section id="marche" class="asset-hero">{{ asset_panel(target, target | iname, fiche.slug) }}</section>
+<section id="marche" class="asset-hero">{{ asset_panel(target, target | iname, fiche.slug, events=true) }}</section>
 
 {% if fiche.context %}
 <section id="contexte" class="card">
@@ -49,6 +50,11 @@
 <section id="signaux" class="card">
     <h2>{{ t('as_signals_h') }}</h2>
     {{ lazy_block('/fragments/asset-signals/' ~ (target | urlencode), 4, t('sb_loading'), t('lazy_retry')) }}
+</section>
+
+<section id="champions" class="card">
+    <h2>{{ t('ch_title') }}</h2>
+    {{ lazy_block('/fragments/champion-history/' ~ (target | urlencode), 3, t('sb_loading'), t('lazy_retry')) }}
 </section>
 
 <section id="actualites" class="card">

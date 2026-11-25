@@ -1,7 +1,7 @@
 {# Fragment (sans base) : une section du panneau latéral de /runs pour un run de reinforcement learning. Les valeurs viennent du
    job (table `job`) et sont échappées automatiquement : pas de `| safe`. Tout est hors échantillon (walk-forward) ; `view` est préparé
    par `rl_routes.get_rl_run` (toutes les clés présentes, `None` si la mesure manque). #}
-{% from "_components.html" import status_badge %}
+{% from "_components.html" import status_badge, rel_time %}
 {% set secs = view.elapsed_s %}
 {% set rd = view.reading %}
 <header class="rp-head">
@@ -52,7 +52,7 @@
     {% if view.gap_trend is not none %}<div class="rp-wide"><dt>{{ t('rlp_stat_vs_trend') }}</dt><dd class="pk-mono">{{ '%+.2f' | format(view.gap_trend) }}</dd></div>{% endif %}
     <div class="rp-wide"><dt>{{ t('rlh_p_period') }}</dt><dd class="pk-mono">{% if view.start %}{{ view.start }} → {{ view.end }}{% else %}—{% endif %}</dd></div>
     <div><dt>{{ t('rp_duration') }}</dt><dd class="pk-mono">{{ '%d min %02d s' | format(secs // 60, secs % 60) if secs is not none else '—' }}</dd></div>
-    <div><dt>{{ t('hist_started') }}</dt><dd>{{ row.started_at or row.created_at or '—' }}</dd></div>
+    <div><dt>{{ t('hist_started') }}</dt><dd>{{ rel_time(row.started_at or row.created_at) }}</dd></div>
 </dl>
 {% if not view.done and not error %}<p class="hint rp-banner">{{ t('rlh_p_pending') }}</p>{% endif %}
 <footer class="rp-foot">

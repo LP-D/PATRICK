@@ -96,6 +96,31 @@
         etaBadge.hidden = false;
     }
 
+    // D27 : frise de la file. Un segment par run (le reste du run en cours, puis la file dans l'ordre), largeur proportionnelle à la durée
+    // estimée ; un run sans estimation reçoit une largeur minimale hachurée. Infobulle : nom, durée, fin estimée.
+    var frise = document.getElementById("queue-frise");
+    function renderFrise(active, queue) {
+        if (!frise) return;
+        var items = [];
+        if (active) items.push({ name: active.name || "", s: active.estimated_remaining_s, active: true });
+        (queue || []).forEach(function (j) { items.push({ name: j.name || j.id || "", s: j.estimated_duration_s, active: false }); });
+        if (!items.length) { frise.hidden = true; frise.textContent = ""; return; }
+        var known = items.filter(function (it) { return it.s != null; }), sum = known.reduce(function (a, it) { return a + it.s; }, 0);
+        var minW = 4, unknownN = items.length - known.length, room = Math.max(0, 100 - unknownN * minW);
+        var lang = document.documentElement.lang || undefined, t = Date.now();
+        frise.textContent = "";
+        items.forEach(function (it) {
+            var seg = document.createElement("span");
+            seg.className = "queue-seg" + (it.active ? " is-active" : "") + (it.s == null ? " is-unknown" : "");
+            seg.style.width = (it.s == null || !sum ? minW : Math.max(1, room * it.s / sum)) + "%";
+            var end = it.s == null ? null : new Date(t += it.s * 1000);
+            seg.title = it.name + " · " + (it.s == null ? tr("queue_frise_unknown", "no estimate")
+                : shortDuration(it.s) + " · " + fmtStr(tr("queue_eta_end", "done around {time}"), { time: end.toLocaleString(lang, { weekday: "short", hour: "2-digit", minute: "2-digit" }) }));
+            frise.appendChild(seg);
+        });
+        frise.hidden = false;
+    }
+
     // --- file d'attente : liste déroulante, réordonnable ---
 
     function setQueueOpen(open) {
@@ -196,6 +221,7 @@
         renderControls(state.active);
         renderQueue(state.queue);
         renderEta(data.queue_eta);
+        renderFrise(state.active, state.queue);
         publish();
     }
 
