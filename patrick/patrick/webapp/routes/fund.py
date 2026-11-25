@@ -281,6 +281,20 @@ def register(app: FastAPI, templates, context) -> None:
         return templates.TemplateResponse(request, "_fund_panel.html", {
             "snap": snap, "rules": manual, "autopilot": auto, "insight": seen, "today": today.isoformat(), **context(request)})
 
+    @app.get("/api/fund/strategies/{strategy_id}/vitrine.html")
+    def api_strategy_showcase(strategy_id: str):
+        """Page vitrine autonome (A26) : pourcentages seulement, aucun montant, aucun script ; téléchargée en fichier."""
+        from fastapi.responses import Response
+
+        from patrick.fund import showcase
+        today = service.current_date()
+
+        def run(conn):
+            return showcase.render(service.strategy_snapshot(conn, _require_strategy(conn, strategy_id), today))
+        page = _call(run)
+        return Response(page, media_type="text/html; charset=utf-8",
+                        headers={"Content-Disposition": f'attachment; filename="vitrine-{strategy_id}.html"'})
+
     @app.get("/api/fund/strategies/{strategy_id}/series")
     def api_strategy_series(strategy_id: str):
         """Valeur nette quotidienne d'une stratégie (D22 : la superposer à une autre sur le graphique de /fonds, en base 100)."""

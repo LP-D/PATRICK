@@ -180,6 +180,7 @@ FUND_STRINGS: dict[str, dict[str, str]] = {
     "fund_auto_w_inverse_vol": _s("volatilité inverse", "inverse volatility"),
     "fund_auto_w_risk_parity": _s("parité de risque (corrélations comprises)", "risk parity (correlations included)"),
     "fund_compare": _s("Comparer avec", "Compare with"),
+    "fund_showcase": _s("page vitrine (sans montants)", "showcase page (no amounts)"),
     "fund_compare_none": _s("aucun fonds", "no fund"),
     "fund_chart_rebased": _s("base 100 au premier jour commun", "base 100 on the first common day"),
 

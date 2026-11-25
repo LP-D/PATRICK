@@ -60,7 +60,7 @@
   {{ metric(t('fund_kpi_cash'), k.cash | eur, t('fund_hint_cash'), "neutral") }}
 </div>
 
-<h3>{{ t('fund_chart_title') }}</h3>
+<h3>{{ t('fund_chart_title') }} <a class="hint" href="/api/fund/strategies/{{ snap.strategy.strategy_id | urlencode }}/vitrine.html" download>{{ t('fund_showcase') }}</a></h3>
 {# D22 : superposer un autre fonds, les deux en base 100 au premier jour commun ; la liste est remplie par fonds.js depuis le tableau. #}
 <label class="fund-compare">{{ t('fund_compare') }}
   <select id="fund-compare-select" data-self="{{ snap.strategy.strategy_id }}"><option value="">{{ t('fund_compare_none') }}</option></select>
