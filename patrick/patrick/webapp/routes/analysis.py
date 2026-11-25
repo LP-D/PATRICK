@@ -288,6 +288,18 @@ def register(app: FastAPI, templates, context) -> None:
     def health_page(request: Request):
         return _health_page(request)
 
+    @app.get("/sante/rapport/{name}.pdf")
+    def health_report_pdf(name: str):
+        """Le rapport hebdomadaire en PDF (A16), sans dépendance (`core/text_pdf.py`)."""
+        from fastapi.responses import Response
+
+        from patrick.core.text_pdf import text_to_pdf
+        text = weekly_report.read(name)
+        if text is None:
+            raise HTTPException(status_code=404, detail="Rapport introuvable")
+        pdf = text_to_pdf(f"PATRICK — {name}", text.splitlines())
+        return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{name.rsplit(".", 1)[0]}.pdf"'})
+
     @app.get("/sante/rapport/{name}", response_class=HTMLResponse)
     def health_report_page(request: Request, name: str):
         return _health_page(request, name)
