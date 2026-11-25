@@ -97,3 +97,21 @@ def evaluate(df: pd.DataFrame, today: pd.Timestamp | None = None, days: int = EV
         return None
     q_har, q_tr = float(qlike(frame["p"], frame["har"]).mean()), float(qlike(frame["p"], frame["tr"]).mean())
     return {"qlike_har": q_har, "qlike_trailing": q_tr, "skill": 1 - q_har / q_tr if q_tr else None, "n": len(frame)}
+
+
+# FO24 (25/11) : volatilité implicite à 30 jours publiée par les marchés d'options pour quelques indices (en points de pourcentage annualisés).
+IMPLIED_INDEX = {"^GSPC": "^VIX", "^NDX": "^VXN", "^IXIC": "^VXN", "^RUT": "^RVX", "^DJI": "^VXD", "GC=F": "^GVZ", "CL=F": "^OVX",
+                 "EURUSD=X": "^EVZ"}
+
+
+def implied_vs_forecast(symbol: str, sigma_daily: float | None, implied_close: float | None) -> dict | None:
+    """Volatilité implicite (indice VIX & co.) contre la prévision HAR annualisée : la PRIME de risque de volatilité.
+
+    Prime = implicite² − prévue² (en variance annualisée) ; positive presque toujours : les vendeurs d'options se font payer le risque de
+    krach. Une prime négative (le marché d'options attend MOINS de mouvement que le modèle) est rare et mérite un coup d'œil."""
+    if sigma_daily is None or implied_close is None or implied_close <= 0:
+        return None
+    forecast_ann = sigma_daily * math.sqrt(252)
+    implied = implied_close / 100.0
+    return {"index": IMPLIED_INDEX.get(symbol), "implied": implied, "forecast": forecast_ann,
+            "premium_var": implied ** 2 - forecast_ann ** 2, "ratio": implied / forecast_ann if forecast_ann else None}

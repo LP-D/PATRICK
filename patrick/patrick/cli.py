@@ -38,6 +38,10 @@ sync_app = typer.Typer(help="Partage de la base, des modèles et des données en
 app.add_typer(sync_app, name="sync")
 retrain_app = typer.Typer(help="Ré-entraînement automatique des runs conseillés, dans un budget hebdomadaire (FO9).")
 app.add_typer(retrain_app, name="retrain")
+alerts_app = typer.Typer(help="Alertes de prix et de changement de signal, notifiées par Windows (FO16).")
+app.add_typer(alerts_app, name="alerts")
+wealth_app = typer.Typer(help="Patrimoine : import automatique des relevés (FO20).")
+app.add_typer(wealth_app, name="wealth")
 data_app = typer.Typer(help="Racine de données de ce PC (magasin, modèles, caches, sauvegardes) : état, création, déplacement.")
 app.add_typer(data_app, name="data")
 news_app = typer.Typer(help="Nouvelles : collecte point-in-time, notes et rattachement aux actifs (jamais d'entraînement).")
@@ -457,6 +461,46 @@ def audit_futures_rolls_cmd(
         typer.echo(f"{sym} : {out['n_suspect']} jour(s) suspect(s) sur {out['n_days']} ({share})")
         for row in out["largest"][:3]:
             typer.echo(f"    {str(row['date'])[:10]} : {row['return'] * 100:+.2f} % ({row['z']:+.1f} écarts), échéance {str(row['nearest_expiry'])[:10]}")
+
+
+@audit_app.command(name="cb-decisions")
+def audit_cb_decisions_cmd() -> None:
+    """Décisions de banques centrales probablement manquées (CO25) : trous plus longs que la cadence des réunions."""
+    from patrick.data import econ_calendar
+    from patrick.tracking import db as trackdb
+
+    conn = trackdb.connect()
+    try:
+        gaps = econ_calendar.decision_gaps(conn)
+        seen = econ_calendar.decisions(conn)
+    finally:
+        conn.close()
+    typer.echo(f"{len(seen)} décision(s) reconnue(s).")
+    for g in gaps:
+        typer.echo(f"  {g['label']} : rien entre le {g['after']} et le {g['before']} ({g['days']} jours)")
+    if not gaps:
+        typer.echo("Aucun trou suspect.")
+
+
+@research_app.command(name="pairs")
+def research_pairs_cmd(
+    symbol: list[str] = typer.Option(None, "--symbol", help="Actif (répétable ; au moins 3)"),  # noqa: B008
+    q_max: float = typer.Option(0.10, "--q-max", help="Seuil de Benjamini-Hochberg"),
+) -> None:
+    """Paires cointégrées parmi les actifs donnés (FO25) : Engle-Granger, couverture, demi-vie, correction du nombre de paires."""
+    from patrick.analysis import pairs_scan
+    from patrick.wealth import prices as wealth_prices
+
+    symbols = list(symbol or [])
+    if len(symbols) < 3:
+        typer.echo("Donner au moins trois actifs (--symbol A --symbol B --symbol C).")
+        raise typer.Exit(code=1)
+    provider = wealth_prices.make_provider(allow_network=True)
+    pairs = pairs_scan.scan({s: provider(s) for s in symbols}, q_max=q_max)
+    n_pairs = len(symbols) * (len(symbols) - 1) // 2
+    typer.echo(f"{len(pairs)} paire(s) retenue(s) sur {n_pairs} testée(s) (q ≤ {q_max}).")
+    for r in pairs:
+        typer.echo(f"  {r['a']} / {r['b']} : couverture {r['hedge']:.2f}, demi-vie {r['half_life']:.0f} séances, q = {r['q']:.3f} ({r['n']} séances)")
 
 
 @audit_app.command(name="signal")
@@ -1695,6 +1739,110 @@ def retrain_auto_cmd(
         typer.echo(f"Sauté : {sk['target']} : {sk['reason']}")
     if not out["queued"]:
         typer.echo("Rien à mettre en file.")
+
+def _last_close(symbol: str):
+    from patrick.wealth import prices as wealth_prices
+
+    series = wealth_prices.make_provider(allow_network=True)(symbol)
+    if series is None or not len(series):
+        return None
+    return str(series.index[-1])[:10], float(series.iloc[-1])
+
+
+@alerts_app.command(name="add")
+def alerts_add_cmd(
+    symbol: str = typer.Argument(..., help="Symbole Yahoo (ex. ^GSPC)"),
+    above: float = typer.Option(None, "--above", help="Sonne quand la clôture passe au-dessus"),
+    below: float = typer.Option(None, "--below", help="Sonne quand la clôture passe en dessous"),
+    flip: int = typer.Option(None, "--flip", help="Sonne quand le champion de cet horizon change de direction"),
+) -> None:
+    """Ajoute une alerte (une seule option parmi --above, --below, --flip)."""
+    from patrick.tracking import alert_rules
+
+    given = [(k, v) for k, v in (("above", above), ("below", below), ("flip", flip)) if v is not None]
+    if len(given) != 1:
+        typer.echo("Une seule option parmi --above, --below, --flip.")
+        raise typer.Exit(code=1)
+    kind, value = given[0]
+    rule = {"symbol": symbol, "kind": kind, **({"horizon": int(value)} if kind == "flip" else {"level": float(value)})}
+    alert_rules.save_rules([*alert_rules.load_rules(), rule])
+    typer.echo(f"Alerte ajoutée : {rule}")
+
+
+@alerts_app.command(name="list")
+def alerts_list_cmd() -> None:
+    """Liste les alertes (numérotées pour `patrick alerts remove`)."""
+    from patrick.tracking import alert_rules
+
+    rules = alert_rules.load_rules()
+    if not rules:
+        typer.echo("Aucune alerte.")
+    for i, r in enumerate(rules, start=1):
+        typer.echo(f"{i}. {r}")
+
+
+@alerts_app.command(name="remove")
+def alerts_remove_cmd(number: int = typer.Argument(..., help="Numéro donné par `patrick alerts list`")) -> None:
+    from patrick.tracking import alert_rules
+
+    rules = alert_rules.load_rules()
+    if not 1 <= number <= len(rules):
+        typer.echo("Numéro inconnu.")
+        raise typer.Exit(code=1)
+    removed = rules.pop(number - 1)
+    alert_rules.save_rules(rules)
+    typer.echo(f"Alerte retirée : {removed}")
+
+
+@alerts_app.command(name="check")
+def alerts_check_cmd(dry_run: bool = typer.Option(False, "--dry-run", help="Affiche sans notifier ni retenir")) -> None:
+    """Évalue les alertes et notifie celles qui sonnent (étape de la nuit, après les prédictions)."""
+    from patrick.tracking import alert_rules
+    from patrick.tracking import db as trackdb
+
+    if not alert_rules.load_rules():
+        typer.echo("Aucune alerte.")
+        return
+    conn = trackdb.connect()
+    try:
+        fired = alert_rules.check(conn, _last_close, dry_run=dry_run)
+    finally:
+        conn.close()
+    for f in fired:
+        typer.echo(f"Alerte : {f['message']}")
+    if not fired:
+        typer.echo("Aucune alerte déclenchée.")
+
+
+@wealth_app.command(name="import-folder")
+def wealth_import_folder_cmd(
+    folder: str = typer.Option(None, "--folder", help="Dossier surveillé (défaut : réglage import_folder)"),
+    account: str = typer.Option(None, "--account", help="Compte de destination (défaut : réglage import_account)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Compte ce qui serait écrit sans rien écrire ni déplacer"),
+) -> None:
+    """Importe les relevés CSV déposés dans le dossier (doublons sautés), puis les range dans importés/ ou refusés/ (FO20)."""
+    from patrick.tracking import db as trackdb
+    from patrick.wealth import folder_import, ledger, symbols
+
+    conf_folder, conf_account = folder_import.configured()
+    folder, account = folder or conf_folder, account or conf_account
+    if not folder or not account:
+        typer.echo("Import automatique non réglé (import_folder et import_account) : rien à faire.")
+        return
+    conn = trackdb.connect()
+    try:
+        acc = ledger.get_account(conn, account)
+        out = folder_import.run(conn, folder, account, resolve=symbols.make_resolver(acc["currency"]) if acc else None, dry_run=dry_run)
+    except ledger.LedgerError as exc:
+        typer.echo(f"Refusé : {exc}")
+        raise typer.Exit(code=1) from None
+    finally:
+        conn.close()
+    for f in out["files"]:
+        typer.echo(f"{f['name']} : {f['written']} écrit(s), {f['skipped']} doublon(s) sauté(s)" + (f" — refusé : {f['reason']}" if f["reason"] else ""))
+    if not out["files"]:
+        typer.echo("Aucun relevé à importer.")
+
 
 
 if __name__ == "__main__":

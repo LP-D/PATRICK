@@ -172,18 +172,30 @@ def register(app: FastAPI, templates, context) -> None:
                                           {"data": data, "kinds": ledger.ACCOUNT_KINDS, **context(request)})
 
     @app.get("/patrimoine/comptes/{account_id}")
-    def patrimoine_account_page(request: Request, account_id: str):
+    def patrimoine_account_page(request: Request, account_id: str, vs: str | None = None):
         conn = trackdb.connect()
+        vs_fund = None
         try:
             detail = service.account_detail(conn, account_id, price_provider())
             accounts = ledger.list_accounts(conn)
+            from patrick.fund import service as fund_service
+            from patrick.fund import store as fund_store
+            strategies = [{"strategy_id": s["strategy_id"], "name": s["name"], "wrapper": s.get("wrapper")} for s in fund_store.list_strategies(conn)]
+            if vs and detail is not None:                 # FO19 : le compte réel contre un fonds simulé, à période égale
+                strategy = fund_store.get_strategy(conn, vs)
+                if strategy is not None:
+                    from patrick.wealth import vs_fund as vs_module
+                    snap = fund_service.strategy_snapshot(conn, strategy)
+                    vs_fund = vs_module.compare(detail["performance"].get("twr_index"), snap["series"])
+                    if vs_fund is not None:
+                        vs_fund["name"] = strategy["name"]
         finally:
             conn.close()
         if detail is None:
             raise HTTPException(status_code=404, detail="Compte introuvable")
         return templates.TemplateResponse(request, "patrimoine_account.html", {
             "detail": detail, "accounts": accounts, "chart": service.chart_payload(detail),
-            "movement_kinds": ledger.MOVEMENT_KINDS,
+            "movement_kinds": ledger.MOVEMENT_KINDS, "strategies": strategies, "vs": vs, "vs_fund": vs_fund,
             "symbol_groups": symbol_groups(_held_symbols(detail["movements"])), **context(request)})
 
     @app.get("/mouvements")

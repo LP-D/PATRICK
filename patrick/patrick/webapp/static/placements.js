@@ -919,6 +919,9 @@
             ["pl_sav_invested", eur(pr.invested)], ["pl_sav_abond", eur(pr.abondement)], ["pl_sav_fees", eur(pr.fees_median)], ["pl_sav_fee_drag", eur(pr.fee_drag_median)],
             ["pl_sav_euro_ps", eur(pr.euro_ps_median)], ["pl_sav_taxes", eur(pr.taxes_median)], ["pl_sav_irr", pct(pr.net_irr_median, 2)],
             ["pl_sav_loss", pct(pr.prob_loss, 0)], pr.prob_goal === null || pr.prob_goal === undefined ? null : ["pl_sav_goal", t("pl_sav_goal_v", { p: pct(pr.prob_goal, 0), g: eur(c.goal) })],
+            // FO21 (25/11) : versement mensuel qui atteint l'objectif une fois sur deux, et quatre fois sur cinq
+            pr.monthly_needed ? ["pl_sav_needed", t("pl_sav_needed_v", { a: pr.monthly_needed.p50 === null ? "—" : eur(pr.monthly_needed.p50),
+                                                                       b: pr.monthly_needed.p80 === null ? "—" : eur(pr.monthly_needed.p80) })] : null,
             pr.tax_saving_entry ? ["pl_sav_saving", eur(pr.tax_saving_entry)] : null].filter(Boolean).reduce(function (acc, x) { return acc.concat([h("dt", { text: t(x[0]) }), h("dd", { text: x[1] })]); }, []));
         var host = h("div", { class: "pl-chart", role: "img", "aria-label": t("pl_sav_fan") });
         var xs = pr.fan.p50.map(function (_v, i) { return i; });

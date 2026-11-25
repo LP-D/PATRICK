@@ -73,7 +73,7 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 | CO22 | 9 tests sautés ou en échec attendu | rien à changer : tous les sauts dépendent de l'environnement (Windows, Node, gymnasium, git) ; le test au tirage fixe du simulateur tourne bien |
 | CO23 | Synchronisation en échec la nuit du 23/11 | fait (lots 4-5 : cause = lecteur F:\ du Google Drive absent ; `sync auto` le note « Reporté » au lieu d'échouer) |
 | CO24 | Protection automatique de l'aperçu | déjà fait : depuis l'incident du 10/10, le cache local écrit par fichier temporaire puis remplacement (`storage/cache_manager.save_dataframe`) : deux écritures simultanées ne laissent plus de fichier tronqué |
-| CO25 | Décisions des banques centrales lues dans les titres | à faire (lot 8) |
+| CO25 | Décisions des banques centrales lues dans les titres | fait (lot 8 : `patrick audit cb-decisions` signale les trous plus longs que la cadence des réunions (Fed 63 j, BCE 56 j…) : une décision probablement manquée par la lecture des titres) |
 | CO26 | Jours de changement d'échéance des contrats à terme | fait en partie (lot 6 : `patrick audit futures-rolls` repère les sauts au-delà de 5 écarts robustes près d'une échéance) ; retirer ces jours des étiquettes = décision (change tous les runs de contrats à terme) |
 | CO27 | Erreurs pyright « valeur peut-être absente » | fait en partie (lots 2-3 : accès à None gardés dans les ordres limite, le transfert de mouvements et la sélection des fonds ; reste du bruit d'annotations pandas) |
 | CO28 | Lecture DM de la sélection des fonds | déjà fait (`fund/selection._dm_evidence` lit la p unilatérale ; `test_a_model_significantly_worse_than_its_baseline_is_not_dm_evidence`) |
@@ -99,16 +99,16 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 | FO13 | Attribution de performance | déjà fait : `fund/insight.attribution` (P&L par modèle, par classe d'actifs, par sens), panneau d'un fonds |
 | FO14 | Rapport mensuel en PDF par fonds | fait (lot 7 : `fund/monthly_report.py`, « Rapport du mois (PDF) » dans le panneau : performance, attribution, ordres, positions, stress tests) |
 | FO15 | Stress tests historiques | fait (lot 7 : positions ouvertes rejouées sur six crises (2000, 2008, 2011, 2018, 2020, 2022), sens et notionnel des dérivés compris ; dans le rapport et `/api/fund/strategies/{id}/stress`) |
-| FO16 | Alertes de prix et de signal | à faire (lot 8) |
-| FO17 | Explication en clair de chaque prédiction | à faire (lot 8) |
-| FO18 | Comparaison de deux ré-entraînements | à faire (lot 8) |
-| FO19 | Comparaison fonds / vraies opérations | à faire (lot 8) |
-| FO20 | Import automatique des relevés | à faire (lot 8) |
-| FO21 | Objectifs patrimoniaux | à faire (lot 8) |
-| FO22 | Exposition aux devises du patrimoine | à faire (lot 8) |
-| FO23 | Dividendes et détachements | à faire (lot 8) |
-| FO24 | Volatilité implicite | à faire (lot 8) |
-| FO25 | Détecteur de paires cointégrées | à faire (lot 8) |
+| FO16 | Alertes de prix et de signal | fait (lot 8 : `patrick alerts add|list|remove|check`, seuils de prix et changement de direction d'un champion, une notification par séance, étape de nuit) |
+| FO17 | Explication en clair de chaque prédiction | fait (lot 8 : phrase « Surtout à cause de… / Freinée par… » au-dessus de l'explication SHAP de la fiche d'un actif, sans modèle de langage) |
+| FO18 | Comparaison de deux ré-entraînements | fait (lot 8 : `tracking/retrain_diff.py`, champion en titre contre celui qu'il a remplacé : variables entrées et sorties, hyperparamètres, métriques ; dans la frise des champions) |
+| FO19 | Comparaison fonds / vraies opérations | fait (lot 8 : page d'un compte réel, « Comparer à un fonds » : rendement pondéré dans le temps du compte contre la valeur nette du fonds, même période) |
+| FO20 | Import automatique des relevés | fait, réglage à toi (lot 8 : `patrick wealth import-folder`, réglages `import_folder` et `import_account`, doublons sautés, fichiers rangés dans importés/ ou refusés/, étape de nuit) |
+| FO21 | Objectifs patrimoniaux | fait (lot 8 : versement mensuel qui atteint l'objectif à 50 % et à 80 %, même tirage que la projection, sur /placements) |
+| FO22 | Exposition aux devises du patrimoine | fait (lot 8 : part du patrimoine réel cotée hors euro et répartition par devise, déduites du symbole, sur /patrimoine) |
+| FO23 | Dividendes et détachements | déjà fait en partie : les dividendes versés entrent dans le P&L des positions des fonds (colonne `dividend` des cours) ; l'agenda des détachements reste à faire |
+| FO24 | Volatilité implicite | fait (lot 8 : volatilité implicite (VIX, VXN, RVX, VXD, GVZ, OVX, EVZ) à côté de la prévision HAR, rapport implicite / prévue, sur la fiche d'un actif) |
+| FO25 | Détecteur de paires cointégrées | fait (lot 8 : `patrick research pairs`, Engle-Granger, couverture, demi-vie, correction de Benjamini-Hochberg du nombre de paires) |
 | FO26 | Planification des lots par créneau | à faire (lot 9) |
 | FO27 | Assistant de lancement par objectif | à faire (lot 9) |
 | FO28 | Résumé du matin lisible sur téléphone | à faire (lot 9) |

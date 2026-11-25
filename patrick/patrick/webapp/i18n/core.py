@@ -709,6 +709,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "shap_load_error": {"fr": "Erreur de chargement.", "en": "Loading error."},
     "shap_unavailable": {"fr": "Aucune explication disponible pour cet horizon.",
                          "en": "No explanation available for this horizon."},
+    "shap_plain_for": {"fr": "Surtout à cause de : {list}.", "en": "Mostly because of: {list}."},
+    "shap_plain_against": {"fr": "Freinée par : {list}.", "en": "Held back by: {list}."},
     "shap_caption": {
         "fr": "{date} · prédiction : {label} (confiance {proba}) · {n} features · échantillon {split}",
         "en": "{date} · predicted: {label} (confidence {proba}) · {n} features · {split} sample",
@@ -862,7 +864,7 @@ def js_strings(lang: str, path: str = "") -> dict[str, str]:
         "assetpanel_error", "assetpanel_insufficient",
         "assetpanel_load_error", "assetpanel_returns", "assetpanel_long_window",
         "assetpanel_zscore", "assetpanel_ma", "assetpanel_vol_current", "assetpanel_vol_long_run", # feature/shap-waterfall (shap_waterfall.js)
-        "shap_loading", "shap_load_error", "shap_unavailable", "shap_caption",
+        "shap_loading", "shap_load_error", "shap_unavailable", "shap_caption", "shap_plain_for", "shap_plain_against",
         "shap_units_hint", "shap_units_hint_probability", "shap_class_0", "shap_class_1", "shap_class_2", "shap_class_3",
     ]
     keys = [*keys, *PAGE_JS_KEYS.get(path, ()), *(TEXT_JS_KEYS if path == "/news" else ()), *(EARN_JS_KEYS if path.startswith("/resultats") else ()),

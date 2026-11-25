@@ -76,5 +76,6 @@ def overview(conn: sqlite3.Connection, prices) -> dict:
     real_cash = sum(a["cash"] for a in accounts if a["mode"] == "real")
     risk = performance.ex_ante_risk({"total": real_total, "rows": rows}, prices) if rows else \
         {"volatility": None, "covered_weight": 0.0, "excluded": [], "shrinkage": None}
+    from patrick.wealth.currency_exposure import exposure
     return {"accounts": accounts, "totals": totals, "holdings": rows, "real_cash": real_cash, "risk": risk,
-            "warnings": all_warnings}
+            "warnings": all_warnings, "currencies": exposure(rows, real_cash)}

@@ -154,6 +154,10 @@ Step "verification de la sauvegarde" @("-m", "patrick.cli", "storage", "verify-b
 Step "signaux regroupes" @("-m", "patrick.cli", "audit", "signal")
 Step "synchronisation" @("-m", "patrick.cli", "sync", "auto")
 Step "autres predictions" @($Predict, "--base-dir", $RepoDir, "--log-file", $PredictLog, "--skip-funds")
+# Releves de courtier deposes dans le dossier surveille (FO20 du 25/11, reglages import_folder et import_account ; sinon ne fait rien).
+Step "import des releves" @("-m", "patrick.cli", "wealth", "import-folder")
+# Alertes de prix et de changement de signal (FO16 du 25/11) : `patrick alerts add ...` ; sans alerte, ne fait rien.
+Step "alertes" @("-m", "patrick.cli", "alerts", "check")
 # Re-entrainement automatique des runs conseilles (FO9 du 25/11), dans le budget hebdomadaire `auto_retrain_per_week` (0 par defaut :
 # ne fait rien). En dernier : les jobs partent apres les predictions, jamais en concurrence avec elles.
 Step "reentrainement automatique" @("-m", "patrick.cli", "retrain", "auto")

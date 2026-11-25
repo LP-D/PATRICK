@@ -107,6 +107,30 @@ def decisions(conn: sqlite3.Connection) -> list[dict]:
     return [{"date": d, "label": lab} for d, lab in sorted(out)]
 
 
+# CO25 (25/11) : écart maximal attendu entre deux décisions de chaque banque (la Fed se réunit 8 fois par an, la BCE toutes les six
+# semaines, la Banque d'Angleterre 8 fois, la Banque du Canada 8 fois) : au-delà, une décision a probablement échappé à la lecture des titres.
+MAX_GAP_DAYS = {"Fed": 63, "BCE": 56, "BoE": 63, "BoC": 63}
+
+
+def decision_gaps(conn: sqlite3.Connection, today: dt.date | None = None) -> list[dict]:
+    """Trous suspects dans les décisions reconnues : `[{"label", "after", "before", "days"}]` (le dernier trou va jusqu'à aujourd'hui).
+
+    Sans calendrier officiel à télécharger, la régularité des réunions suffit à voir une décision manquée : un communiqué au titre reformulé,
+    une collecte interrompue. Une banque jamais vue n'est pas signalée (aucune source collectée pour elle)."""
+    today = today or _today()
+    by: dict[str, list[str]] = {}
+    for d in decisions(conn):
+        by.setdefault(d["label"], []).append(d["date"])
+    out = []
+    for label, days in by.items():
+        limit = MAX_GAP_DAYS.get(label, 63)
+        dates = sorted(dt.date.fromisoformat(d) for d in days)
+        for a, b in zip(dates, [*dates[1:], today], strict=True):
+            if (b - a).days > limit:
+                out.append({"label": label, "after": a.isoformat(), "before": b.isoformat(), "days": (b - a).days})
+    return sorted(out, key=lambda r: (r["label"], r["after"]))
+
+
 def releases(conn: sqlite3.Connection, start: str | None = None, end: str | None = None) -> list[dict]:
     """Publications stockées entre `start` et `end` (inclus) : `[{"date", "label"}]`, triées."""
     try:

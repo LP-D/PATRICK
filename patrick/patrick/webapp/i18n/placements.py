@@ -216,6 +216,8 @@ PLACEMENTS_STRINGS.update({
     "pl_sav_fees": _s("Frais d'enveloppe (médiane)", "Wrapper fees (median)"), "pl_sav_fee_drag": _s("Manque à gagner dû aux frais", "Shortfall due to fees"),
     "pl_sav_euro_ps": _s("Prélèvements annuels fonds en euros", "Annual euro-fund charges"), "pl_sav_taxes": _s("Impôts de sortie", "Exit taxes"),
     "pl_sav_irr": _s("Rendement annuel net (TRI médian)", "Net annual return (median IRR)"), "pl_sav_loss": _s("Probabilité de récupérer moins que versé", "Probability of getting back less than paid in"),
+    "pl_sav_needed": _s("Versement mensuel pour l'objectif", "Monthly saving for the goal"),
+    "pl_sav_needed_v": _s("{a} pour 50 % de chances, {b} pour 80 %", "{a} for a 50 % chance, {b} for 80 %"),
     "pl_sav_goal": _s("Objectif", "Goal"), "pl_sav_goal_v": _s("{p} de chances d'atteindre {g}", "{p} chance of reaching {g}"), "pl_sav_goal_short": _s("Objectif atteint", "Goal reached"),
     "pl_sav_saving": _s("Économie d'impôt à l'entrée", "Tax saving at entry"), "pl_sav_fan": _s("Évolution du capital", "Capital over time"),
     "pl_goal_line": _s("objectif", "goal"),

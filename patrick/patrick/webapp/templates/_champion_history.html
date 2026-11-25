@@ -15,5 +15,16 @@
   </li>
   {% endfor %}
 </ol>
+{# FO18 (25/11) : ce qui a changé entre le champion en titre et celui qu'il a remplacé (tracking/retrain_diff.py) #}
+{% set d = (diffs or {}).get(horizon) %}
+{% if d %}
+<details class="ch-diff"><summary>{{ t('ch_diff_title') }}</summary>
+  <p class="hint">{{ t('ch_diff_vars', i=d.features_in | length, o=d.features_out | length, k=d.features_kept) }}</p>
+  {% if d.features_in %}<p class="pk-mono">+ {{ d.features_in[:15] | join(', ') }}{% if d.features_in | length > 15 %} …{% endif %}</p>{% endif %}
+  {% if d.features_out %}<p class="pk-mono">− {{ d.features_out[:15] | join(', ') }}{% if d.features_out | length > 15 %} …{% endif %}</p>{% endif %}
+  {% if d.params_changed %}<p class="hint">{{ t('ch_diff_params') }} : {% for k, v in d.params_changed.items() %}{{ k }} {{ v[0] }} → {{ v[1] }}{% if not loop.last %} ; {% endif %}{% endfor %}</p>{% endif %}
+  {% if d.metrics %}<p class="hint">{% for k, v in d.metrics.items() %}{{ k }} {{ '%.3f' | format(v[0]) if v[0] is not none else '—' }} → {{ '%.3f' | format(v[1]) if v[1] is not none else '—' }}{% if not loop.last %} ; {% endif %}{% endfor %}</p>{% endif %}
+</details>
+{% endif %}
 {% endfor %}
 {% endif %}

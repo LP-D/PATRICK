@@ -36,7 +36,19 @@
                 split: data.split,
             }
         );
-        output.innerHTML =
+        // FO17 (25/11) : la même explication en une phrase, sans modèle de langage (live/explain.plain_summary)
+        function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return "&#" + c.charCodeAt(0) + ";"; }); }
+        function names(list) {
+            return (list || []).map(function (c) {
+                var v = Math.abs(c.value) >= 100 ? c.value.toFixed(0) : (Math.abs(c.value) >= 1 ? c.value.toFixed(2) : c.value.toPrecision(2));
+                return esc(c.name) + " (" + esc(v) + ")";
+            }).join(", ");
+        }
+        var plain = data.plain && (data.plain["for"] || []).length
+            ? '<p class="shap-plain">' + fmtStr(tr("shap_plain_for", "Mostly because of: {list}."), { list: names(data.plain["for"]) }) +
+              ((data.plain.against || []).length ? " " + fmtStr(tr("shap_plain_against", "Held back by: {list}."), { list: names(data.plain.against) }) : "") + "</p>"
+            : "";
+        output.innerHTML = plain +
             '<p class="hint shap-caption">' + caption + '</p>' +
             '<div class="shap-waterfall-svg">' + data.svg + '</div>' +
             '<p class="hint shap-units-hint">' + (data.units === "probability"

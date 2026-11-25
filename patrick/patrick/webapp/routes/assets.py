@@ -52,6 +52,11 @@ def register(app: FastAPI, templates, i18n_context) -> None:
             forecast = vol_forecast.har_sigma(df)
             if forecast:
                 out = {**forecast, "eval": vol_forecast.evaluate(df), "ohlc": {"open", "high", "low"}.issubset(df.columns)}
+                index = vol_forecast.IMPLIED_INDEX.get(symbol)
+                if index:                                   # FO24 : la volatilité implicite du marché d'options à côté de la prévision
+                    implied_hist = market_data.price_history(index, "yfinance", "1mo")
+                    closes = implied_hist.get("closes") or []
+                    out["implied"] = vol_forecast.implied_vs_forecast(symbol, forecast.get("sigma"), closes[-1] if closes else None)
         return templates.TemplateResponse(request, "_vol_forecast.html", {**i18n_context(request), "vf": out})
 
 
@@ -117,8 +122,10 @@ def register(app: FastAPI, templates, i18n_context) -> None:
         conn = trackdb.connect()
         try:
             by_horizon = champion_history.history(conn, symbol)
+            from patrick.tracking import retrain_diff
+            diffs = {h: retrain_diff.diff(conn, symbol, int(h)) for h in by_horizon}
         finally:
             conn.close()
         longest = max((r["days"] or 0 for reigns in by_horizon.values() for r in reigns), default=0)
         return templates.TemplateResponse(request, "_champion_history.html",
-                                          {**i18n_context(request), "by_horizon": by_horizon, "longest": max(longest, 1)})
+                                          {**i18n_context(request), "by_horizon": by_horizon, "longest": max(longest, 1), "diffs": diffs})

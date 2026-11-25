@@ -43,6 +43,11 @@
 {{ metric(t('pat_vol'), "—", t('pat_vol_none'), "pending") }}
 {% endif %}
 {{ metric(t('pat_pos'), data.holdings | length, t('pat_pos_rel'), "neutral") }}
+{# FO22 (25/11) : part du patrimoine réel cotée hors euro (devise déduite du symbole) #}
+{% if data.currencies and data.currencies.foreign_share is not none %}
+{% set ccy_parts = [] %}{% for c in data.currencies.rows[:5] %}{% set _ = ccy_parts.append(c.currency ~ ' ' ~ ((c.share * 100) | round | int) ~ ' %') %}{% endfor %}
+{{ metric(t('pat_fx'), data.currencies.foreign_share | pct, ccy_parts | join(' · '), "neutral") }}
+{% endif %}
 </div>
 
 <section class="card">
