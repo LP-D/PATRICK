@@ -358,7 +358,9 @@
               footer=t('rd_bl_foot', n=detail.baselines | length)) }}
 </section>
 
-{# A27 : questions en langage naturel sur ce run (Claude, depuis les seuls chiffres enregistrés ; static/run_qa.js). #}
+{# A27 : questions en langage naturel sur ce run (Claude, depuis les seuls chiffres enregistrés ; static/run_qa.js). Seulement avec une clé
+   Claude posée dans l'environnement (ANTHROPIC_API_KEY) : l'API est payante à part, rien ne s'affiche ni ne s'appelle sans elle. #}
+{% if run_qa_enabled() %}
 <section id="questions" class="card run-qa" data-run-id="{{ run.run_id }}" data-label-wait="{{ t('qa_wait') }}" data-label-leak="{{ t('qa_leak', cutoff='{cutoff}', share='{share}') }}" data-label-error="{{ t('qa_error') }}" data-label-refused="{{ t('qa_refused') }}">
 <h2>{{ t('qa_title') }}</h2>
 <p class="hint">{{ t('qa_hint') }}</p>
@@ -370,6 +372,7 @@
 <div class="run-qa-answer" aria-live="polite" hidden></div>
 </section>
 <script src="{{ asset('run_qa.js') }}" defer></script>
+{% endif %}
 
 <section id="config" class="card">
 <h2>{{ t('rd_section_config') }}</h2>

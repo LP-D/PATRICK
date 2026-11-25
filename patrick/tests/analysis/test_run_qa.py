@@ -109,6 +109,12 @@ def test_route_answers_404s_and_explains_a_missing_sdk(tmp_path, monkeypatch):
     _make_run(c)
     c.close()
     client = TestClient(app)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+    page = client.get("/runs/run1").text                                       # sans clé : ni carte, ni appel possible
+    assert "Questions sur ce run" not in page and "run_qa.js" not in page
+    assert client.post("/api/runs/run1/ask", json={"question": "x"}).status_code == 503
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
     page = client.get("/runs/run1").text
     assert "Questions sur ce run" in page and 'data-run-id="run1"' in page and "run_qa.js" in page
     fake, _ = _client()

@@ -36,7 +36,7 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | A24 | Import de relevés de courtier (CSV) | déjà fait (`wealth/importer.py` : import CSV tolérant des relevés de courtier, glisser-déposer sur /patrimoine et /mouvements) |
 | A25 | Export Excel en un clic | fait (lot 7 : `/api/export/patrick.xlsx`, liens sur /predictions et /fonds) |
 | A26 | Page vitrine d'un fonds (HTML sans données personnelles) | fait (lot 7 : page vitrine HTML autonome, pourcentages seulement) |
-| A27 | Questions en langage naturel sur un run (`llm_guard`) | fait (lot 7b : `analysis/run_qa.py`, carte « Questions sur ce run » : Claude Opus 5.5 répond depuis les seuls chiffres du run, avertissement de fuite par `llm_guard` (part des dates évaluées après sa limite de connaissance) ; extra `llm`, SDK installé dans le .venv ; clé API à fournir par Léon) |
+| A27 | Questions en langage naturel sur un run (`llm_guard`) | fait, désactivé par choix (lot 7b ; 25/11 : pas de clé API Claude, payante à part, Léon n'en veut pas) : la carte « Questions sur ce run » et la route n'apparaissent qu'avec `ANTHROPIC_API_KEY` posée ; sans clé, aucun appel et aucun coût |
 | A28 | Comparaisons limitées à un même profil | fait (lot 7 : l'onglet « Comparer » restreint la liste à la cible ; la comparaison signalait déjà des profils différents) |
 | A29 | Test de restauration automatique de la sauvegarde | fait (lot 7 : `patrick storage verify-backup`, étape de nuit ; vraie sauvegarde du 24/11 restaurable, 116 s) |
 | A30 | Parité de risque pour les fonds combinés | fait (lot 7 : `fund/risk_parity.py`, pilote `weighting = risk_parity`) |
