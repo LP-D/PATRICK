@@ -148,6 +148,7 @@ UTILITY_ENTRIES: tuple[NavEntry, ...] = (
 # Routes GET qui ne sont PAS des pages (JSON, fichiers, redirects).
 NON_PAGE_PREFIXES: tuple[str, ...] = ("/api/", "/static", "/set-lang/", "/fragments/")
 NON_PAGE_ROUTES: frozenset[str] = frozenset({
+    "/healthz",                 # état du serveur en JSON (AM27 du 25/11)
     "/runs/{run_id}/status",
     "/runs/{run_id}/panel",
     "/runs/{run_id}/results",
