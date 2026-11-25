@@ -238,6 +238,13 @@ templates.env.globals["movers_snapshot"] = alerts.get_cached
 # Design system v3: inline Lucide SVG icons (webapp/icons.py).
 templates.env.globals["icon"] = icons.icon
 templates.env.globals["ui_t"] = i18n.ui_t
+# A27 : la carte « Questions sur ce run » n'existe que si une clé Claude est posée (API payante à part, désactivée par défaut).
+def _run_qa_enabled() -> bool:
+    from patrick.analysis import run_qa
+    return run_qa.enabled()
+
+
+templates.env.globals["run_qa_enabled"] = _run_qa_enabled
 # Noms d'affichage des instruments (webapp/instruments.py) : `{{ symbole | iname }}` (texte) ou `| iname_tip` (texte + symbole au survol).
 templates.env.filters["iname"] = instruments.display
 templates.env.filters["iname_tip"] = instruments.display_with_tip

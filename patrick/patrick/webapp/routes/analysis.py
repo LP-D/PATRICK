@@ -356,6 +356,8 @@ def register(app: FastAPI, templates, context) -> None:
         """A27 : question en langage naturel sur un run ; Claude répond depuis les seuls chiffres du run (`analysis/run_qa.py`)."""
         from patrick.analysis import run_qa
 
+        if not run_qa.enabled():
+            raise HTTPException(status_code=503, detail=run_qa.NO_CREDENTIALS)
         conn = trackdb.connect()
         try:
             ctx = run_qa.run_context(conn, run_id)

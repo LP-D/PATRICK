@@ -113,6 +113,17 @@ def leak_note(context: dict, model: str = MODEL, margin_days: int = llm_guard.DE
     return {"clean_share": share, "cutoff": cutoff.strftime("%Y-%m-%d")}
 
 
+CREDENTIAL_ENVS = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
+
+
+def enabled() -> bool:
+    """Vrai seulement si une clé Claude est posée dans l'environnement : l'API est payante à part, la carte « Questions sur ce run » ne
+    s'affiche pas sans clé (aucun appel, aucun coût). Le module `anthropic` est importé plus tard, à la première question."""
+    import os
+
+    return any(os.environ.get(name) for name in CREDENTIAL_ENVS)
+
+
 def _client():
     try:
         import anthropic
