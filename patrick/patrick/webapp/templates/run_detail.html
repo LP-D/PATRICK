@@ -265,6 +265,15 @@
 
 <section id="durees" class="card">
 <h2>{{ t('rd_time_h') }}</h2>
+{# VI12 (25/11) : les étapes du run en frise, une barre par étape proportionnelle à sa durée #}
+{% set phase_total = (detail.phase_breakdown.phases | sum(attribute='duration_s')) or 0 %}
+{% if phase_total > 0 %}
+<div class="phase-frieze" role="img" aria-label="{{ t('rd_time_h') }}">
+  {% for p in detail.phase_breakdown.phases %}{% set w = (100 * p.duration_s / phase_total) | round(1) %}
+  <span class="phase-seg phase-{{ loop.index0 % 6 }}" style="--w: {{ w }}%" title="{{ p.phase }} · {{ p.duration_s }} s ({{ w }} %)">{% if w >= 9 %}{{ p.phase }}{% endif %}</span>
+  {% endfor %}
+</div>
+{% endif %}
 {% set phase_rows = [] %}
 {% for p in detail.phase_breakdown.phases %}
 {% set _ = phase_rows.append([p.phase, p.duration_s ~ ' s', p.occurrences]) %}

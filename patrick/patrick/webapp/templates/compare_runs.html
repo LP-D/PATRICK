@@ -11,8 +11,9 @@
 {% if cmp_kinds | unique | list | length > 1 %}<p class="banner banner-warning" role="note">{{ t('cmp_mixed') }}</p>{% endif %}
 {# Deux runs de profils ou de méthodes différents ne se comparent pas à effort égal (ADR 0011) #}
 {% if (runs | map(attribute='profile') | map('string') | unique | list | length > 1) or (runs | map(attribute='method') | unique | list | length > 1) %}<p class="banner banner-warning" role="note">{{ t('cmp_mixed_profile') }}</p>{% endif %}
+<label class="set-check cmp-diff-toggle"><input type="checkbox" id="cmp-only-diff"> {{ t('cmp_only_diff') }} (<span data-diff-count>…</span>)</label>
 <div class="compare-runs-table-wrap">
-<table class="data-table compare-runs-table">
+<table class="data-table compare-runs-table" data-diff-table="cmp-only-diff">
     <thead>
         <tr><th>{{ t('cmp_measure') }}</th>{% for run in runs %}<th><a href="/runs/{{ run.run_id }}/detail">{{ run.name }}</a></th>{% endfor %}</tr>
     </thead>
@@ -39,4 +40,5 @@
     </tbody>
 </table>
 </div>
+<script src="{{ asset('compare_diff.js') }}" defer></script>
 {% endblock %}

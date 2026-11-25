@@ -235,11 +235,17 @@
     });
 
     // ------------------------------------------------------------------ relance (synchroniser / mettre à jour)
-    function relaunch(url) {
+    function relaunch(url, body) {
         api("GET", "/api/app/boot").then(function (boot) {
             var previous = boot.data.boot_id;
-            api("POST", url).then(function (res) {
+            api("POST", url, body).then(function (res) {
+                if (res.status === 409 && url === "/api/app/update/apply") { $("update-busy").classList.remove("hidden"); return; }
                 if (res.status === 409) { return flash(tr("app_busy_training"), "warning"); }
+                if (res.data && res.data.scheduled) {
+                    $("update-busy").classList.add("hidden");
+                    $("update-result").textContent = tr("app_update_scheduled");
+                    return;
+                }
                 if (!res.ok) { return failed(res); }
                 $("relaunch-overlay").classList.remove("hidden");
                 waitForRestart(previous, Date.now());
@@ -296,6 +302,13 @@
     $("update-apply").addEventListener("click", function () {
         window.patrickDialog.confirm(tr("app_confirm_update"), tr("app_update_apply_label")).then(function (yes) {
             if (yes) { relaunch("/api/app/update/apply"); }
+        });
+    });
+    // Mise à jour pendant un entraînement (25/11)
+    $("update-after-run").addEventListener("click", function () { relaunch("/api/app/update/apply", {mode: "after_run"}); });
+    $("update-now").addEventListener("click", function () {
+        window.patrickDialog.confirm(tr("app_update_now_confirm"), tr("app_update_now")).then(function (yes) {
+            if (yes) { relaunch("/api/app/update/apply", {mode: "now"}); }
         });
     });
 

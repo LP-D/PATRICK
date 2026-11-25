@@ -1479,3 +1479,11 @@ legend {
   transform: translate(-50%, 0);
   transition: opacity var(--dur-pop) var(--ease-enter), transform var(--dur-pop) var(--ease-enter);
 }
+
+/* VI27 (25/11) : tableaux denses (réglage de /reglages) */
+:root[data-density="dense"] .data-table th, :root[data-density="dense"] .data-table td { padding-top: 3px; padding-bottom: 3px; line-height: 1.3; }
+:root[data-density="dense"] .data-table { font-size: 12px; }
+/* VI28 (25/11) : haute lisibilité : corps plus grand, texte secondaire assombri ou éclairci, bordures plus nettes, focus épais */
+:root[data-contrast="high"] { font-size: 112%; --text-2: var(--text); --text-3: var(--text); --line: var(--line-strong); }
+:root[data-contrast="high"] :focus-visible { outline: 3px solid var(--brand) !important; outline-offset: 2px; }
+:root[data-contrast="high"] .hint, :root[data-contrast="high"] .na { color: var(--text) !important; opacity: 1 !important; }

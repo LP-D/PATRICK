@@ -119,33 +119,40 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 
 | # | Proposition | Statut |
 |---|---|---|
-| VI1 | Cône de prévision | à faire (lot 10) |
-| VI2 | Treemap d'un fonds | à faire (lot 10) |
-| VI3 | Cascade du rendement | à faire (lot 10) |
-| VI4 | Carte de corrélation des positions | à faire (lot 10) |
-| VI5 | Calendrier en carte de chaleur | à faire (lot 10) |
-| VI6 | Nuage risque / rendement des fonds | à faire (lot 10) |
-| VI7 | Courbe ROC avec curseur de seuil | à faire (lot 10) |
-| VI8 | Entonnoir de sélection des variables | à faire (lot 10) |
-| VI9 | Importance des familles de variables au fil des plis | à faire (lot 10) |
-| VI10 | Frise de la nuit | à faire (lot 10) |
-| VI11 | Jauge du disque et des caches | à faire (lot 10) |
-| VI12 | Étapes d'un run en frise | à faire (lot 10) |
-| VI13 | Mur de signaux | à faire (lot 10) |
-| VI14 | Carte du monde des marchés | à faire (lot 10) |
-| VI15 | Mini-courbes dans les tableaux | à faire (lot 10) |
-| VI16 | Pastille de fraîcheur sur chaque chiffre | à faire (lot 10) |
-| VI17 | Distribution des rendements d'un actif | à faire (lot 10) |
-| VI18 | Week-ends et fériés grisés | à faire (lot 10) |
-| VI19 | Échelle logarithmique | à faire (lot 10) |
-| VI20 | Zoom par sélection et mini-carte | à faire (lot 10) |
-| VI21 | Couleur fixe par famille de modèle | à faire (lot 10) |
-| VI22 | Icône de classe d'actifs | à faire (lot 10) |
-| VI23 | Comparateur de runs en « diff » | à faire (lot 10) |
-| VI24 | Notes libres datées sur les courbes | à faire (lot 10) |
-| VI25 | Plein écran d'un graphique | à faire (lot 10) |
-| VI26 | Synthèse personnalisable | à faire (lot 10) |
-| VI27 | Mode dense des tableaux | à faire (lot 10) |
-| VI28 | Thème haute lisibilité | à faire (lot 10) |
-| VI29 | Onglet du navigateur vivant | à faire (lot 10) |
-| VI30 | Écran de démarrage du lanceur | à faire (lot 10) |
+| VI1 | Cône de prévision | à faire : cône de prévision sur la courbe d'un actif (la prévision HAR existe, le dessin dans le graphique de cours reste à écrire) |
+| VI2 | Treemap d'un fonds | à faire |
+| VI3 | Cascade du rendement | fait (lot 10 : cascade gain avant frais → frais → financement → gain net dans le panneau d'un fonds) |
+| VI4 | Carte de corrélation des positions | à faire |
+| VI5 | Calendrier en carte de chaleur | fait (lot 10 : calendrier des rendements quotidiens des 12 derniers mois sous la perte depuis le plus haut d'un fonds) |
+| VI6 | Nuage risque / rendement des fonds | à faire |
+| VI7 | Courbe ROC avec curseur de seuil | déjà fait en partie : courbe ROC dans l'analyse d'un run (`analysis/sec_predict.py`) ; le curseur de seuil reste à faire |
+| VI8 | Entonnoir de sélection des variables | à faire |
+| VI9 | Importance des familles de variables au fil des plis | déjà fait en partie : stabilité des variables d'un pli à l'autre (Jaccard) sur la page d'un run ; vue par famille à faire |
+| VI10 | Frise de la nuit | à faire |
+| VI11 | Jauge du disque et des caches | déjà fait : disque et tailles des dossiers de données sur /diagnostics (`analysis/diagnostics.py`) |
+| VI12 | Étapes d'un run en frise | fait (lot 10 : frise des étapes en tête de la section « Durées » de la page d'un run) |
+| VI13 | Mur de signaux | déjà fait : grand tableau cibles × horizons de /predictions, couleur par direction et fiabilité |
+| VI14 | Carte du monde des marchés | à faire |
+| VI15 | Mini-courbes dans les tableaux | déjà fait en partie (mini-courbes de /donnees et des résultats) ; /predictions et /runs à faire |
+| VI16 | Pastille de fraîcheur sur chaque chiffre | déjà fait en partie : page /data-freshness ; pastille sur chaque chiffre à faire |
+| VI17 | Distribution des rendements d'un actif | déjà fait : distributions des rendements dans /exploration |
+| VI18 | Week-ends et fériés grisés | fait (lot 10 : trous de plus de 4 jours grisés sur tous les graphiques du moteur commun, week-ends ordinaires exclus) |
+| VI19 | Échelle logarithmique | fait (lot 10 : bouton « Échelle logarithmique » sur tous les graphiques en ligne du moteur commun) |
+| VI20 | Zoom par sélection et mini-carte | déjà fait : zoom par sélection, déplacement et molette dans le moteur commun (D23) ; mini-carte à faire |
+| VI21 | Couleur fixe par famille de modèle | à faire |
+| VI22 | Icône de classe d'actifs | à faire |
+| VI23 | Comparateur de runs en « diff » | fait (lot 10 : lignes différentes surlignées et case « Seulement les différences » dans le comparateur de runs) |
+| VI24 | Notes libres datées sur les courbes | à faire |
+| VI25 | Plein écran d'un graphique | fait (lot 10 : bouton « Plein écran » sur les graphiques du moteur commun) |
+| VI26 | Synthèse personnalisable | à faire |
+| VI27 | Mode dense des tableaux | fait (lot 10 : « Tableaux denses » dans /reglages, gardé par ce navigateur) |
+| VI28 | Thème haute lisibilité | fait (lot 10 : « Haute lisibilité » dans /reglages : corps 112 %, texte secondaire au contraste plein, focus épais) |
+| VI29 | Onglet du navigateur vivant | fait (lot 10 : titre de l'onglet « 45 % · cible » pendant un run, ⏸ en pause) |
+| VI30 | Écran de démarrage du lanceur | déjà fait : fenêtre de démarrage du lanceur (`desktop/ui.py`, `_show_splash`) |
+
+## Demande ajoutée en cours de chantier (25/11)
+
+| # | Demande | Statut |
+|---|---|---|
+| X1 | Mettre à jour la copie stable même si un entraînement est en cours | fait (lot 10 : Réglages > Mise à jour, ou `python -m patrick.desktop update --after-run / --now`. « À la fin du run en cours » : le worker lit la demande entre deux jobs, s'arrête, l'assistant attend sa fin, met à jour, relance le serveur, qui relance la file ; le run en cours finit sur l'ancienne version. « Maintenant » : le worker est arrêté, la mise à jour passe, le run reprend où il en était (reprise du scan, A14), sa fin sur la nouvelle version. Jamais deux versions dans le même processus) |
+

@@ -694,4 +694,13 @@
     relTimes();
     window.setInterval(relTimes, 60000);
     document.addEventListener("patrick:content", relTimes);           // fragment chargé par lazy.js
+    /* VI27 / VI28 (25/11) : cases [data-local-pref] de /reglages : préférence d'affichage gardée dans ce navigateur, appliquée tout de suite. */
+    document.querySelectorAll("input[data-local-pref]").forEach(function (box) {
+        var key = box.getAttribute("data-local-pref"), on = box.getAttribute("data-on"), attr = box.getAttribute("data-attr");
+        try { box.checked = window.localStorage.getItem(key) === on; } catch (e) { box.checked = root.getAttribute(attr) === on; }
+        box.addEventListener("change", function () {
+            try { if (box.checked) window.localStorage.setItem(key, on); else window.localStorage.removeItem(key); } catch (e) { /* stockage bloqué */ }
+            if (box.checked) root.setAttribute(attr, on); else root.removeAttribute(attr);
+        });
+    });
 })();

@@ -581,3 +581,14 @@ def _worker_loop(pid: int, db_path: str, poll_interval: float, idle_timeout: flo
         _run_one_job(conn, job, pid)
         finished = jobs_db.get_job(conn, job["job_id"]) or {}
         print(f"[WORKER] job {job['job_id']} finished: {finished.get('status')}")
+        # Mise à jour demandée « à la fin du run en cours » (desktop/update.py) : ce run a fini sur l'ancienne version ; le worker s'arrête,
+        # l'assistant de relance attend sa fin, met à jour et relance le serveur, qui relance un worker pour la suite de la file.
+        try:
+            from patrick.desktop import update as app_update
+            if app_update.pending():
+                app_update.clear_pending()
+                print("[WORKER] mise à jour demandée : arrêt du worker pour l'appliquer ; la file reprend ensuite.")
+                app_update.spawn_after_worker(pid)
+                return
+        except (OSError, ImportError) as exc:
+            print(f"[WORKER] mise à jour demandée mais non lancée : {exc}")

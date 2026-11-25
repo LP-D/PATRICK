@@ -315,7 +315,7 @@ def worker_cmd(
             if jobs_db.worker_is_alive(conn):
                 typer.echo("Un worker vivant tient déjà la file : rien à faire.")
                 return
-            if not conn.execute("SELECT 1 FROM job WHERE status = 'queued' LIMIT 1").fetchone():
+            if not conn.execute("SELECT 1 FROM job WHERE status IN ('queued', 'running') LIMIT 1").fetchone():
                 typer.echo("Aucun job en file : rien à faire.")
                 return
         finally:

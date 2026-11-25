@@ -22,6 +22,9 @@ script below (no flash), otherwise the OS preference applies.
                 var theme = localStorage.getItem("patrick-theme");
                 if (theme === "light" || theme === "dark") root.setAttribute("data-theme", theme);
                 if (localStorage.getItem("patrick-sidebar") === "collapsed") root.setAttribute("data-sidebar", "collapsed");
+                /* VI27 / VI28 (25/11) : tableaux denses, thème haute lisibilité (réglés sur /reglages) */
+                if (localStorage.getItem("patrick-density") === "dense") root.setAttribute("data-density", "dense");
+                if (localStorage.getItem("patrick-contrast") === "high") root.setAttribute("data-contrast", "high");
             } catch (e) { /* storage blocked: OS theme, expanded sidebar */ }
             /* Page affichée dans un volet de /split : sans barre latérale ni barre du haut (l'adresse de la fenêtre parente est lisible : même origine). */
             try { if (window.self !== window.top && window.top.location.pathname === "/split") document.documentElement.setAttribute("data-embed", ""); } catch (e) { /* autre origine : page complète */ }

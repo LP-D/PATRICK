@@ -100,6 +100,12 @@ SETTINGS_STRINGS: dict[str, dict[str, str]] = {
                             "This page will reload by itself. A sync can take several minutes."),
     "app_relaunch_lost": _s("Le serveur ne répond plus. Relance PATRICK avec son icône.",
                             "The server is not responding. Relaunch PATRICK from its icon."),
+    "app_update_busy_title": _s("Mise à jour pendant un entraînement", "Update during a training run"),
+    "app_update_busy_text": _s("Un entraînement est en cours. À la fin du run en cours : il finit sur la version actuelle, puis PATRICK se met à jour et la file reprend. Maintenant : l'entraînement est arrêté, PATRICK se met à jour, puis le run reprend où il en était (les calculs déjà faits sont gardés) avec la nouvelle version.", "A training run is in progress. At the end of the current run: it finishes on the current version, then PATRICK updates and the queue resumes. Now: the training is stopped, PATRICK updates, then the run resumes where it was (finished computations are kept) on the new version."),
+    "app_update_after_run": _s("À la fin du run en cours", "At the end of the current run"),
+    "app_update_now": _s("Maintenant (le run reprend)", "Now (the run resumes)"),
+    "app_update_now_confirm": _s("Arrêter l'entraînement en cours pour mettre à jour maintenant ? Il reprendra où il en était, avec la nouvelle version.", "Stop the current training to update now? It will resume where it was, on the new version."),
+    "app_update_scheduled": _s("Mise à jour programmée : elle se fera à la fin du run en cours.", "Update scheduled: it will happen at the end of the current run."),
     "app_busy_training": _s("Un entraînement est en cours : réessaie à la fin.",
                             "A training run is in progress: try again when it finishes."),
 
@@ -156,5 +162,5 @@ SETTINGS_JS_KEYS: tuple[str, ...] = (
     "app_confirm_sync", "app_confirm_update",
     "app_share_clear_label", "app_share_sync_now_label", "app_update_apply_label", "app_relaunch_lost", "app_busy_training", "app_update_uptodate",
     "app_update_available", "app_update_checking", "app_shortcuts_done", "app_backup_info", "app_backup_none",
-    "app_backup_started", "app_lastsync_title", "app_update_version", "setting_saved",
+    "app_backup_started", "app_lastsync_title", "app_update_version", "setting_saved", "app_update_now_confirm", "app_update_now", "app_update_scheduled",
 )

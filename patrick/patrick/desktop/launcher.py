@@ -311,7 +311,8 @@ def stop() -> int:
 
 # --- relance demandée depuis la page Réglages --------------------------------------------------------------------
 
-def relaunch(*, do_sync: bool = False, do_update: bool = False, server_pid: int | None = None) -> int:
+def relaunch(*, do_sync: bool = False, do_update: bool = False, server_pid: int | None = None, stop_worker: bool = False,
+             wait_pid: int | None = None) -> int:
     """Processus détaché lancé par la page Réglages : arrête le serveur, met à jour et/ou fusionne le partage,
     relance le serveur. La fenêtre reste ouverte : la page attend que le serveur revienne puis se recharge.
     L'avancement est écrit dans `~/.patrick/relaunch.json`."""
@@ -322,6 +323,12 @@ def relaunch(*, do_sync: bool = False, do_update: bool = False, server_pid: int 
         with contextlib.suppress(OSError):
             _write_json(RELAUNCH_STATE, {"state": value, "message": message, "steps": steps, "at": _now()})
 
+    if wait_pid:                                 # mise à jour demandée « à la fin du run » : le worker qui s'arrête doit être parti
+        state("running", "Fin de l'entraînement en cours…")
+        deadline = time.monotonic() + 600
+        import psutil
+        while time.monotonic() < deadline and psutil.pid_exists(wait_pid):
+            time.sleep(1.0)
     state("running", "Arrêt de PATRICK…")
     time.sleep(1.0)                              # laisse partir la réponse HTTP qui a lancé cette relance
     if server_pid:
@@ -331,7 +338,7 @@ def relaunch(*, do_sync: bool = False, do_update: bool = False, server_pid: int 
     try:
         if do_update:
             state("running", "Mise à jour…")
-            res = update.apply(progress=lambda text: state("running", text))
+            res = update.apply(progress=lambda text: state("running", text), stop_worker=stop_worker)
             steps.append(res["message"])
             log(f"mise à jour (Réglages) : {res['status']} - {res['message']}")
         if do_sync and sync.configured_folder():
