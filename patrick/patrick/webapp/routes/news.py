@@ -127,6 +127,17 @@ def register(app: FastAPI, templates, i18n_context) -> None:
             it["known_at_label"] = _fmt_ts(it["known_at"])
         return templates.TemplateResponse(request, "_news_central.html", {"items": items, **i18n_context(request)})
 
+    @app.get("/fragments/news-agenda")
+    def news_agenda_fragment(request: Request):
+        from patrick.data import econ_calendar
+
+        conn = trackdb.connect()
+        try:
+            agenda = econ_calendar.agenda(conn)
+        finally:
+            conn.close()
+        return templates.TemplateResponse(request, "_news_agenda.html", {"agenda": agenda, **i18n_context(request)})
+
     @app.get("/fragments/news-event-study")
     def news_event_study_fragment(request: Request, symbol: str | None = None):
         symbol = _check_symbol(symbol)

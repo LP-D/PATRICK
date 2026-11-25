@@ -11,7 +11,7 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | # | Proposition | Statut |
 |---|---|---|
 | A1 | Prévision du niveau de volatilité (HAR, QLIKE) pour dimensionner les fonds | fait (lot 7 : `fund/vol_forecast.py`, HAR-RV jugé en QLIKE ; pilote `vol_model = har` ; S&P 500 réel : gain QLIKE +29,7 %) |
-| A2 | DCC-GARCH dans `tracking/covariance.py` | à faire |
+| A2 | DCC-GARCH dans `tracking/covariance.py` | fait (lot 7b : estimateur `dcc` dans `tracking/covariance.py`, DCC(1,1) sur résidus GARCH, 750 séances) |
 | A3 | Variables GJR / APARCH / HAR dans le ML (option hors empreinte) | à faire |
 | A4 | Variables texte (ton banques centrales / actualités) dans l'entraînement | à faire |
 | A5 | Volatilité intrajournalière (Parkinson, Garman-Klass) | fait (lot 7 : variance de Garman-Klass ramenée à l'échelle clôture à clôture, dans la prévision HAR) |
@@ -25,8 +25,8 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | A13 | Ordres manuels sur un fonds | déjà fait (saisie d'un ordre ou d'une position à la main : « Nouvelle position », `/api/fund/strategies/{id}/orders`) ; « 0 ordre manuel » était un constat d'usage |
 | A14 | Reprise d'un run au niveau du scan | à faire |
 | A15 | Notifications Windows | fait (lot 7 : notification Windows de fin de nuit s'il y a quelque chose à signaler, préférence `notify_night`) |
-| A16 | Rapport hebdomadaire PDF | à faire |
-| A17 | Calendrier économique superposé aux cours | à faire |
+| A16 | Rapport hebdomadaire PDF | fait (lot 7b : `core/text_pdf.py`, PDF sans dépendance ; lien PDF à côté de chaque rapport sur /sante) |
+| A17 | Calendrier économique superposé aux cours | fait (lot 7b : `data/econ_calendar.py`, migration 0058 : dates FRED d'IPC, emploi, PIB, PCE, ventes (passées et à venir) rafraîchies avec les nouvelles ; décisions Fed/BCE/BoE/BoC lues dans les titres des communiqués ; repères sur la courbe de chaque actif, agenda sur /news) |
 | A18 | Bai-Perron et ARFIMA exact | fait en partie (lot 7 : Bai-Perron et d de Whittle local dans l'étude « racine unitaire ») ; ARFIMA exact par maximum de vraisemblance non fait |
 | A19 | EVT pour la VaR des fonds | fait (lot 7 : VaR et ES à 99 % par loi de Pareto généralisée, panneau d'un fonds) |
 | A20 | PBO sur /strategies | fait (lot 7 : PBO de la grille de réglages du laboratoire) |

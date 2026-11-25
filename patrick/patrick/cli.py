@@ -1073,6 +1073,9 @@ def news_refresh_cmd(
     pages = report["bodies"]
     if pages["fetched"] or pages["failed"]:
         typer.echo(f"Pages de banque centrale lues : {pages['fetched']} ({pages['failed']} échec(s), {pages['skipped']} ignorée(s)).")
+    cal = report.get("calendar") or {}
+    if not cal.get("skipped", True):
+        typer.echo(f"Calendrier économique : {cal['stored']} date(s) de publication FRED à jour.")
     for name, error in report["errors"]:
         typer.echo(f"Source en échec : {name} -- {error}")
 

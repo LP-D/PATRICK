@@ -39,6 +39,12 @@
 </section>
 
 <section class="card">
+<h2>{{ t('news_agenda_title') }}</h2>
+<p class="hint">{{ t('news_agenda_sub') }}</p>
+{{ lazy_block('/fragments/news-agenda', 3, t('sb_loading'), t('lazy_retry')) }}
+</section>
+
+<section class="card">
 <h2>{{ t('news_central_title') }}
     {{ help_icon('news_tone', t('gl_t_news_tone'), t('glossary_open_aria', term=t('gl_t_news_tone'))) }}
 </h2>

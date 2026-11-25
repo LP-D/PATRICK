@@ -434,12 +434,25 @@
                 ctx.setLineDash(dashOf(l.dash, [4, 4])); ctx.beginPath(); ctx.moveTo(padL, Y(l.y)); ctx.lineTo(W - padR, Y(l.y)); ctx.stroke(); ctx.setLineDash([]);
                 if (l.label) { ctx.fillStyle = muted; ctx.font = font; ctx.textAlign = "right"; ctx.textBaseline = "bottom"; ctx.fillText(l.label, W - padR - 6, Y(l.y) - 3); ctx.textBaseline = "alphabetic"; }
             });
-            visibleMarkers(o.vlines, vx0, vx1).forEach(function (l) {             // événements datés (frontière de pli, début du holdout, promotion...) : x dans l'unité de l'axe
+            var marks = visibleMarkers(o.vlines, vx0, vx1);
+            marks.forEach(function (l) {             // événements datés (frontière de pli, début du holdout, promotion...) : x dans l'unité de l'axe
                 var px = Math.round(X(l.x)) + 0.5;
                 ctx.strokeStyle = color(l.color || "--text-3"); ctx.lineWidth = l.width || 1;
                 ctx.setLineDash(dashOf(l.dash, [2, 3])); ctx.beginPath(); ctx.moveTo(px, padT); ctx.lineTo(px, padT + ph); ctx.stroke(); ctx.setLineDash([]);
-                if (l.label) { ctx.fillStyle = muted; ctx.font = font; ctx.textAlign = "left"; ctx.textBaseline = "top"; ctx.fillText(l.label, px + 4, padT + 2); ctx.textBaseline = "alphabetic"; }
             });
+            // Étiquettes sans chevauchement : deux rangées ; les repères `minor` (calendrier économique) seulement s'il reste de la place.
+            // Sans place, la ligne reste, sans étiquette.
+            ctx.font = font; ctx.fillStyle = muted; ctx.textAlign = "left"; ctx.textBaseline = "top";
+            var labelRows = [[], []];
+            marks.filter(function (l) { return l.label; }).sort(function (a, b) { return ((a.minor ? 1 : 0) - (b.minor ? 1 : 0)) || (a.x - b.x); })
+                .forEach(function (l) {
+                    var lx = Math.round(X(l.x)) + 4.5, rx = lx + ctx.measureText(l.label).width + 4;
+                    for (var r = 0; r < labelRows.length; r++) {
+                        var free = labelRows[r].every(function (seg) { return rx <= seg[0] || lx >= seg[1]; });
+                        if (free) { labelRows[r].push([lx, rx]); ctx.fillText(l.label, lx, padT + 2 + r * 13); return; }
+                    }
+                });
+            ctx.textBaseline = "alphabetic";
             if (fin && ch && (o.baseline || o.trend)) {                           // niveau de départ de la période (comme la « clôture précédente »)
                 ctx.strokeStyle = withAlpha(muted, 0.8); ctx.lineWidth = 1; ctx.setLineDash([5, 4]);
                 ctx.beginPath(); ctx.moveTo(padL, Math.round(Y(ch.first)) + 0.5); ctx.lineTo(W - padR, Math.round(Y(ch.first)) + 0.5); ctx.stroke(); ctx.setLineDash([]);

@@ -124,7 +124,8 @@ def _link_hints(conn: sqlite3.Connection, hints: dict[str, list[str]], source: s
 
 def refresh(conn: sqlite3.Connection, feeds=None, fetch=None, now=None, linker: EntityLinker | None = None,
             with_gdelt: bool = False, gdelt_queries=None, gdelt_fetch=None, yahoo_symbols=None, yahoo_fetch=None,
-            score: bool = True, settings: dict | None = None, bodies: bool = True) -> dict:
+            score: bool = True, settings: dict | None = None, bodies: bool = True, calendar: bool | None = None,
+            calendar_session=None) -> dict:
     settings = machine_settings.load() if settings is None else settings
     now = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
     feeds = sources.feeds_from_settings(settings) if feeds is None else feeds
@@ -169,7 +170,17 @@ def refresh(conn: sqlite3.Connection, feeds=None, fetch=None, now=None, linker: 
         body_report = fulltext.fetch_bodies(conn, list(feeds) + sources.feeds_from_settings(settings), fetch or sources.fetch_url,
                                             now=now)
     scored = score_pending(conn, linker=linker, settings=settings) if score else 0
-    return {"added": added, "scored": scored, "errors": errors, "skipped_without_date": skipped, "bodies": body_report}
+    calendar_report = {"stored": 0, "errors": [], "skipped": True}
+    if calendar is None:                                # par défaut : seulement pour une vraie collecte (un test injecte `fetch`)
+        calendar = fetch is None
+    if calendar:
+        # A17 : dates officielles des publications macro (FRED), la nuit avec les nouvelles
+        from patrick.data import econ_calendar
+
+        calendar_report = econ_calendar.refresh(conn, session=calendar_session) if calendar_session else econ_calendar.refresh(conn)
+        errors += calendar_report["errors"]
+    return {"added": added, "scored": scored, "errors": errors, "skipped_without_date": skipped, "bodies": body_report,
+            "calendar": calendar_report}
 
 
 MAX_LAG_HOURS = 72.0      # au-delà, une news n'est plus de l'actualité (flux relu après coup) : stockée mais écartée
