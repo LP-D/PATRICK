@@ -540,6 +540,40 @@ def register(app: FastAPI, templates, context) -> None:
             return autopilot.preview(conn, strategy_id, service.current_date(), settings)
         return await run_in_threadpool(_call, run)
 
+    @app.get("/api/fund/strategies/{strategy_id}/report.pdf")
+    def api_fund_monthly_report(strategy_id: str, month: str | None = None):
+        """FO14/FO15 (25/11) : rapport mensuel du fonds en PDF (performance, attribution, ordres, positions, stress tests)."""
+        import re as _re
+
+        from fastapi.responses import Response
+
+        from patrick.fund import monthly_report
+        month = month or service.current_date().strftime("%Y-%m")
+        if not _re.fullmatch(r"\d{4}-\d{2}", month):
+            raise HTTPException(status_code=400, detail="mois attendu au format AAAA-MM")
+        conn = trackdb.connect()
+        try:
+            pdf = monthly_report.report_pdf(conn, strategy_id, month)
+        except store.FundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        finally:
+            conn.close()
+        return Response(pdf, media_type="application/pdf",
+                        headers={"Content-Disposition": f'inline; filename="fonds-{strategy_id[:8]}-{month}.pdf"'})
+
+    @app.get("/api/fund/strategies/{strategy_id}/stress")
+    def api_fund_stress(strategy_id: str):
+        """FO15 (25/11) : positions ouvertes du fonds rejouées sur les grandes crises passées."""
+        from patrick.fund import monthly_report
+        conn = trackdb.connect()
+        try:
+            strategy = store.get_strategy(conn, strategy_id)
+            if strategy is None:
+                raise HTTPException(status_code=404, detail="stratégie introuvable")
+            return {"windows": monthly_report.stress(service.strategy_snapshot(conn, strategy))}
+        finally:
+            conn.close()
+
     @app.get("/api/fund/strategies/{strategy_id}/autopilot/preview.html")
     async def api_autopilot_preview_html(request: Request, strategy_id: str):
         """Fragment HTML (rendu serveur, échappé) de l'aperçu, pour le panneau de /fonds."""

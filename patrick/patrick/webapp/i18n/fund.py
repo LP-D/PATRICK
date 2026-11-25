@@ -489,6 +489,11 @@ FUND_STRINGS: dict[str, dict[str, str]] = {
         "Dernier cycle le {day} : {selected} modèle(s), {placed} ordre(s) placé(s), {pending} en attente, {refused} refusé(s).",
         "Last cycle on {day}: {selected} model(s), {placed} order(s) placed, {pending} pending, {refused} refused."),
     "fund_auto_rules_title": _s("Règles du pilote", "Autopilot rules"),
+    "fund_report_pdf": _s("Rapport du mois (PDF)", "Monthly report (PDF)"),
+    "fund_hist_title": _s("Historique des réglages", "Settings history"),
+    "fund_hist_enable": _s("pilote activé", "autopilot enabled"),
+    "fund_hist_update": _s("réglages changés", "settings changed"),
+    "fund_hist_disable": _s("pilote désactivé", "autopilot disabled"),
     "fund_auto_retired": _s("retirée le {day}", "retired on {day}"),
     "fund_auto_active": _s("active", "active"),
     "fund_auto_pv_title": _s(

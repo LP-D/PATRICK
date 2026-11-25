@@ -1000,6 +1000,20 @@ def sync_merge_cmd(
         typer.echo(f"Ancienne base sauvegardée : {res['backup']}")
 
 
+@fund_app.command(name="spreads")
+def fund_spreads_cmd() -> None:
+    """Écart achat-vente affiché par Yahoo, par classe de frais, contre la médiane du modèle de frais (AM11 : mesure seulement)."""
+    from datetime import datetime
+
+    from patrick.fund import spread_check
+
+    typer.echo(f"Mesure du {datetime.now():%Y-%m-%d %H:%M} (heure locale ; hors séance, les écarts de Yahoo ne veulent rien dire)")  # noqa: DTZ005
+    for row in spread_check.measure():
+        measured = f"{row['measured_bps']:.2f}" if row["measured_bps"] is not None else "—"
+        ratio = f"x{row['ratio']:.1f}" if row["ratio"] is not None else ""
+        typer.echo(f"  {row['fee_class']:<14} modèle {row['model_bps']:>5} pb · observé {measured:>6} pb ({row['n']} titres) {ratio}")
+
+
 @fund_app.command(name="rule-create")
 def fund_rule_create_cmd(
     strategy: str = typer.Option(..., "--strategy", help="Identifiant de la stratégie (str_...)"),

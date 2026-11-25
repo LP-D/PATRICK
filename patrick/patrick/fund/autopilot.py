@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import contextlib
 import datetime as dt
+import json
 import logging
 import math
 import sqlite3
@@ -137,9 +138,37 @@ def configure(conn: sqlite3.Connection, strategy_id: str, raw: dict | None) -> d
     if store.get_strategy(conn, strategy_id) is None:
         raise store.FundError("stratégie introuvable")
     settings = Settings.from_dict(raw)
-    stored = {**(store.get_autopilot(conn, strategy_id) or {}), "enabled": True, "settings": settings.to_dict()}
+    before = store.get_autopilot(conn, strategy_id) or {}
+    stored = {**before, "enabled": True, "settings": settings.to_dict()}
     store.set_autopilot(conn, strategy_id, stored)
+    if not before.get("enabled") or before.get("settings") != stored["settings"]:
+        _log_settings(conn, strategy_id, "update" if before.get("enabled") else "enable", before.get("settings"), stored["settings"])
     return stored
+
+
+def _log_settings(conn: sqlite3.Connection, strategy_id: str, action: str, before: dict | None, after: dict | None) -> None:
+    """FO12 (25/11) : historique daté des réglages (`fund_settings_log`, migration 0060). Une base plus ancienne sans la table : rien."""
+    with contextlib.suppress(sqlite3.Error):
+        conn.execute("INSERT INTO fund_settings_log (strategy_id, action, before_json, after_json) VALUES (?, ?, ?, ?)",
+                     (strategy_id, action, json.dumps(before, sort_keys=True) if before is not None else None,
+                      json.dumps(after, sort_keys=True) if after is not None else None))
+        conn.commit()
+
+
+def settings_history(conn: sqlite3.Connection, strategy_id: str, limit: int = 50) -> list[dict]:
+    """Changements de réglages, du plus récent au plus ancien : `{changed_at, action, changes: {réglage: (avant, après)}}`."""
+    try:
+        rows = conn.execute("SELECT changed_at, action, before_json, after_json FROM fund_settings_log WHERE strategy_id = ? "
+                            "ORDER BY changed_at DESC, log_id DESC LIMIT ?", (strategy_id, limit)).fetchall()
+    except sqlite3.Error:
+        return []
+    out = []
+    for changed_at, action, before_json, after_json in rows:
+        before, after = json.loads(before_json or "{}") or {}, json.loads(after_json or "{}") or {}
+        keys = sorted(set(before) | set(after))
+        out.append({"changed_at": changed_at, "action": action,
+                    "changes": {k: (before.get(k), after.get(k)) for k in keys if before.get(k) != after.get(k)}})
+    return out
 
 
 def overlay(conn: sqlite3.Connection, strategy_id: str, raw: dict | None) -> dict:
@@ -343,7 +372,7 @@ def status(conn: sqlite3.Connection, strategy_id: str, rules: list[dict] | None 
     if rules is None:
         rules = systematic.rule_summaries(conn, strategy_id)
     return {"enabled": bool(stored.get("enabled")), "settings": Settings.from_dict(stored.get("settings")).to_dict(),
-            "last_run": stored.get("last_run"),
+            "last_run": stored.get("last_run"), "history": settings_history(conn, strategy_id, limit=12),
             "rules": [r for r in rules if (r["config"].get("managed") or {}).get("by") == MANAGER]}
 
 
@@ -550,4 +579,6 @@ def disable(conn: sqlite3.Connection, strategy_id: str) -> dict:
     stored = store.get_autopilot(conn, strategy_id)
     if stored is not None:
         store.set_autopilot(conn, strategy_id, {**stored, "enabled": False})
+        if stored.get("enabled"):
+            _log_settings(conn, strategy_id, "disable", stored.get("settings"), None)
     return {"removed_rules": removed}

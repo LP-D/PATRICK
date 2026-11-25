@@ -7,6 +7,7 @@
 <div class="card-head">
   <h2>{{ s.name }} <span class="tag">{{ s.wrapper }}</span> <span class="tag">{{ t('fund_cat_' ~ s.category ~ '_short') }}</span>{% if s.fee_flat is not none %} <span class="tag" title="{{ t('fund_flat_fee_hint') }}">{{ t('fund_flat_fee', fee=(s.fee_flat | eur)) }}</span>{% endif %}</h2>
   <div class="row">
+    <a class="btn-ghost" href="/api/fund/strategies/{{ s.strategy_id | urlencode }}/report.pdf" target="_blank" rel="noopener">{{ t('fund_report_pdf') }}</a>
     <button type="button" class="btn-ghost" data-act="rename" data-strategy-id="{{ s.strategy_id }}" data-name="{{ s.name }}">{{ t('fund_act_rename') }}</button>
     <button type="button" class="btn-ghost" data-act="archive" data-strategy-id="{{ s.strategy_id }}"
             data-confirm="{{ t('fund_confirm_archive') }}">{{ t('fund_act_archive') }}</button>
@@ -315,6 +316,18 @@
   {% if autopilot.last_run %}{% set lr = autopilot.last_run %}
   <p class="hint">{{ t('fund_auto_last', day=lr.day, selected=lr.selected, placed=lr.placed, pending=lr.pending, refused=lr.refused) }}</p>
   {% if lr.halted %}<div class="banner banner-warning">{{ t('fund_auto_halted', drawdown=(lr.halted.drawdown | pct(1)), limit=(lr.halted.limit | pct(0))) }}</div>{% endif %}
+  {% endif %}
+  {% if autopilot.history %}
+  {# FO12 (25/11) : historique daté des réglages du pilote (`fund_settings_log`) #}
+  <details class="fund-settings-history">
+    <summary>{{ t('fund_hist_title') }} <span class="hint">({{ autopilot.history | length }})</span></summary>
+    <ul class="ch-list">
+      {% for h in autopilot.history %}
+      <li><time class="rel-time" datetime="{{ h.changed_at | replace(' ', 'T') }}Z" title="{{ h.changed_at }} UTC">{{ h.changed_at }}</time> · {{ t('fund_hist_' ~ h.action) }}
+        {% if h.action == 'update' %}<span class="hint">{% for k, v in h.changes.items() %}{{ k }} : {{ v[0] }} → {{ v[1] }}{% if not loop.last %} ; {% endif %}{% endfor %}</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </details>
   {% endif %}
   {% if autopilot.rules %}
   <h4>{{ t('fund_auto_rules_title') }} <span class="hint">({{ autopilot.rules | length }})</span></h4>
