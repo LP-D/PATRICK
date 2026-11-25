@@ -358,6 +358,19 @@
               footer=t('rd_bl_foot', n=detail.baselines | length)) }}
 </section>
 
+{# A27 : questions en langage naturel sur ce run (Claude, depuis les seuls chiffres enregistrés ; static/run_qa.js). #}
+<section id="questions" class="card run-qa" data-run-id="{{ run.run_id }}" data-label-wait="{{ t('qa_wait') }}" data-label-leak="{{ t('qa_leak') }}" data-label-error="{{ t('qa_error') }}" data-label-refused="{{ t('qa_refused') }}">
+<h2>{{ t('qa_title') }}</h2>
+<p class="hint">{{ t('qa_hint') }}</p>
+<form class="run-qa-form">
+  <label class="visually-hidden" for="run-qa-question">{{ t('qa_title') }}</label>
+  <textarea id="run-qa-question" name="question" rows="2" maxlength="2000" placeholder="{{ t('qa_placeholder') }}" required></textarea>
+  <button type="submit" class="btn">{{ t('qa_ask') }}</button>
+</form>
+<div class="run-qa-answer" aria-live="polite" hidden></div>
+</section>
+<script src="{{ asset('run_qa.js') }}" defer></script>
+
 <section id="config" class="card">
 <h2>{{ t('rd_section_config') }}</h2>
 {# La config complète fait plusieurs milliers de lignes (l'univers de tickers

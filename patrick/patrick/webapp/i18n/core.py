@@ -671,6 +671,16 @@ STRINGS: dict[str, dict[str, str]] = {
     "rd_section_summary": {"fr": "Résumé", "en": "Summary"},
     "rd_section_trials": {"fr": "Essais", "en": "Trials"},
     "rd_section_config": {"fr": "Configuration", "en": "Configuration"},
+    "qa_title": {"fr": "Questions sur ce run", "en": "Ask about this run"},
+    "qa_hint": {"fr": "Claude répond à partir des seuls chiffres enregistrés de ce run (métriques, tests, essais), sans prévision ni conseil. Nécessite le module anthropic et une clé API.",
+                "en": "Claude answers from this run's stored figures only (metrics, tests, trials), no forecast or advice. Needs the anthropic package and an API key."},
+    "qa_placeholder": {"fr": "Par exemple : le meilleur modèle bat-il vraiment la référence naïve ?", "en": "For example: does the best model really beat the naive baseline?"},
+    "qa_ask": {"fr": "Demander", "en": "Ask"},
+    "qa_wait": {"fr": "Réflexion en cours…", "en": "Thinking…"},
+    "qa_error": {"fr": "Question impossible", "en": "Question failed"},
+    "qa_refused": {"fr": "Le modèle a refusé de répondre.", "en": "The model declined to answer."},
+    "qa_leak": {"fr": "Le modèle de langage connaît les marchés jusqu'au {cutoff} : seules {share} des dates évaluées sont postérieures à cette limite (avec la marge). Une explication de ce qui s'est passé sur le reste peut mêler les chiffres et le souvenir de la suite.",
+                "en": "The language model knows markets up to {cutoff}: only {share} of the evaluated dates fall after that limit (with the margin). An explanation of what happened on the rest may mix the figures with hindsight."},
 
     # Scope lines (shared)
     "scope_universe": {"fr": "Portée de l'univers", "en": "Universe scope"},
