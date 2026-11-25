@@ -65,16 +65,17 @@ def test_fragment_renders_and_refuses_unknown_symbols(tmp_path, monkeypatch):
 
     from patrick.webapp import app as webapp
     from patrick.webapp import forms
+    from patrick.webapp.routes import assets as assets_routes
 
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     symbol = next(s for s, src in forms.TARGET_SOURCE_BY_SYMBOL.items() if src == "yfinance" and "." not in s and not s.startswith("^"))
     monkeypatch.setattr(v, "load_info", lambda s: dict(INFO))
     monkeypatch.setattr(v, "risk_free", lambda currency=None, loader=None: 0.04)
-    webapp._VALUATION_CACHE.clear()
+    assets_routes._VALUATION_CACHE.clear()
     client = TestClient(webapp.app)
     text = client.get(f"/fragments/valuation/{symbol}", params={"g": 0.08}).text
     assert "DCF inversé" in text and "PER attendu" in text and "21,5" in text and 'value="0.08" selected' in text
     assert client.get("/fragments/valuation/NOPE_XYZ").status_code == 404
-    webapp._VALUATION_CACHE.clear()
+    assets_routes._VALUATION_CACHE.clear()
     monkeypatch.setattr(v, "load_info", lambda s: {})
     assert "Pas de données de valorisation" in client.get(f"/fragments/valuation/{symbol}").text
