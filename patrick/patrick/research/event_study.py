@@ -190,7 +190,7 @@ def run_event_study(prices: pd.Series, events, benchmark: pd.Series | None = Non
     labels = labels or [None] * len(list(events))
     windows: list[tuple[pd.Timestamp, int, int, str]] = []
 
-    for ev, label in zip(events, labels):
+    for ev, label in zip(events, labels, strict=True):
         d0 = event_day_zero(ev, days, market_close, market_tz)
         if d0 is None:
             skipped.append({"event": str(ev), "reason": "after the price history"})

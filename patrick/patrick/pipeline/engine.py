@@ -974,7 +974,7 @@ def _fit_eval_full(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: n
             y_proba = cal_clf.predict_proba(X_te)
             classes = list(cal_clf.classes_)
             confidence = np.array([row[classes.index(p)] if p in classes else np.nan
-                                    for row, p in zip(y_proba, y_pred)])
+                                    for row, p in zip(y_proba, y_pred, strict=True)])
             p_up = calibration_lib.p_up_from_proba(y_proba, classes)
             calibrated = True
         else:
@@ -1013,7 +1013,7 @@ def _fit_eval_full(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: n
                 # Les colonnes de `predict_proba` suivent `classes_`, PAS les étiquettes : `y_proba[i, y_pred]` lisait la probabilité d'une
                 # autre classe (ou plantait, IndexError avalé, AUC perdue) dès qu'une classe manquait à l'entraînement.
                 classes = list(getattr(clf, "classes_", range(y_proba.shape[1])))
-                confidence = np.array([row[classes.index(p)] if p in classes else np.nan for row, p in zip(y_proba, y_pred)])
+                confidence = np.array([row[classes.index(p)] if p in classes else np.nan for row, p in zip(y_proba, y_pred, strict=True)])
                 p_up = calibration_lib.p_up_from_proba(y_proba, classes)
     met = metrics(y_te, y_pred, y_proba=align_proba(y_proba, classes))
     if p_up is not None and len(p_up) == len(y_te):

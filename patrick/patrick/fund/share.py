@@ -101,7 +101,7 @@ def _strategy_dump(conn: sqlite3.Connection, strategy_id: str) -> dict:
     for table in ("fund_strategy", "fund_rule", "fund_order"):
         cols = _columns(conn, "main", table)
         rows = conn.execute(f'SELECT {_csv(cols)} FROM main."{table}" WHERE strategy_id = ?', (strategy_id,)).fetchall()
-        out[table] = [dict(zip(cols, r)) for r in rows]
+        out[table] = [dict(zip(cols, r, strict=False)) for r in rows]
     return out
 
 

@@ -25,6 +25,18 @@ from pathlib import Path
 PERIODS = 252
 SIGNIFICANCE = 0.05
 
+
+def significance_threshold(n_trials) -> float:
+    """Seuil de Šidák pour `n_trials` runs RL essayés sur la même cible (CO29 du 25/11) : 1 - (1 - 5 %)^(1/n).
+
+    Le verdict « bat acheter-garder » comparait chaque run à 5 % sans tenir compte des autres essais sur la cible : sur 456 runs, une
+    vingtaine passent par pur hasard. `n_trials` est compté au lancement (`rl/run.py`, `stats.n_trials`) ; absent (ancien run) = 1."""
+    try:
+        n = max(1, int(n_trials))
+    except (TypeError, ValueError):
+        n = 1
+    return 1.0 - (1.0 - SIGNIFICANCE) ** (1.0 / n)
+
 # (clé, chemin JSON dans `job.result_json`) : lus par `json_extract` pour les listes, où relire des centaines de résultats complets
 # (~130 Ko chacun) coûterait des secondes. `from_result` lit les mêmes chemins dans un résultat déjà chargé.
 SQL_FIELDS: tuple[tuple[str, str], ...] = (
@@ -46,6 +58,7 @@ SQL_FIELDS: tuple[tuple[str, str], ...] = (
     ("n_days", "$.strategy.n"),
     ("delay_suspect", "$.stats.delay.suspect"),
     ("dsr", "$.stats.dsr.dsr"),
+    ("n_trials", "$.stats.n_trials"),
     ("oos_csv", "$.artifacts.oos_csv"),
     # Alignement du run (fuite des séries FRED du jour pour une cible d'Asie d'avant l'alignement version 2 : `suspicion.fred_day_reason`).
     ("target_source", "$.config.objective.target_source"),
@@ -175,6 +188,7 @@ def derive(fields: dict, target: str | None, done: bool = True, delay: dict | No
             cost = drag * PERIODS / n_days
     sharpe, sharpe_bh = _num(fields.get("sharpe")), _num(fields.get("sharpe_buy_hold"))
     p_value = _num(fields.get("p_vs_buy_hold"))
+    threshold = significance_threshold(fields.get("n_trials"))
     suspect = fields.get("delay_suspect")
     if delay is not None:
         suspect = delay.get("suspect")
@@ -194,12 +208,12 @@ def derive(fields: dict, target: str | None, done: bool = True, delay: dict | No
             verdict = "held_bh"
         elif sharpe_bh is None:
             verdict = None
-        elif sharpe > sharpe_bh and p_value is not None and p_value < SIGNIFICANCE:
+        elif sharpe > sharpe_bh and p_value is not None and p_value < threshold:
             verdict = "beats"
         else:
             verdict = "better" if sharpe > sharpe_bh else "worse"
     return {"engine": engine, "excess": excess, "agent_share": share, "cost_ann": cost, "turnover": _num(fields.get("turnover")),
-            "p_vs_buy_hold": p_value, "sharpe_trend": _num(fields.get("sharpe_trend")), "leak": leak, "verdict": verdict,
+            "p_vs_buy_hold": p_value, "p_threshold": threshold, "sharpe_trend": _num(fields.get("sharpe_trend")), "leak": leak, "verdict": verdict,
             "verdict_state": VERDICT_STATE.get(verdict or "", "neutral"), "delay": delay}
 
 
@@ -221,7 +235,7 @@ def is_credible_win(reading: dict) -> bool:
 
 
 _VERDICT_LOG = {"leak": "fuite probable", "untradable": "cible non négociable", "held_bh": "égal à acheter-garder (tous les plis repliés)",
-                "beats": "bat acheter-garder (significatif à 5 %)", "better": "au-dessus d'acheter-garder, non significatif",
+                "beats": "bat acheter-garder (significatif, seuil corrigé du nombre d'essais)", "better": "au-dessus d'acheter-garder, non significatif",
                 "worse": "sous acheter-garder"}
 
 

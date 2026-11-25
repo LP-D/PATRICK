@@ -88,7 +88,7 @@
         { key: "margin", label: "ag_c_margin", num: true, cell: function (r) { return isNum(r.margin) ? { nodeText: PK.spct(r.margin, 1) } : "—"; }, sort: function (r) { return r.margin; } },
         { key: "p", label: "ag_c_p", num: true, cell: function (r) { return isNum(r.p) ? PK.pval(r.p) : "—"; }, sort: function (r) { return r.p; } },
         { key: "p_deflated", label: "ag_c_pdef", num: true, cell: function (r) { return isNum(r.p_deflated) ? PK.pval(r.p_deflated) : "—"; }, sort: function (r) { return r.p_deflated; } },
-        { key: "reads", label: "ag_c_reads", num: true, cell: function (r) { return r.reads_recorded + " / " + r.reads_inferred + " / " + r.duels; }, sort: function (r) { return r.reads_recorded + r.reads_inferred; } },
+        { key: "reads", label: "ag_c_reads", num: true, cell: function (r) { return r.reads_recorded + " (" + (r.reads_runs || 0) + " runs) / " + r.reads_inferred + " / " + r.duels; }, sort: function (r) { return r.reads_recorded + r.reads_inferred; } },
         { key: "verdict", label: "ag_c_verdict", cell: verdictChip, sort: function (r) { return r.verdict || ""; } },
     ];
     function filtered() {

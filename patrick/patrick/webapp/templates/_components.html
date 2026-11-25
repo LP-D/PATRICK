@@ -70,7 +70,7 @@
 <thead><tr>{% for h in headers %}<th{% if loop.index0 in nc %} class="num pk-mono"{% endif %}>{{ h }}</th>{% endfor %}</tr></thead>
 <tbody>
 {% for row in rows %}
-<tr class="{{ row_classes[loop.index0] if row_classes else '' }}"{% if limit and loop.index0 >= limit %} data-extra hidden{% endif %}>{% for cell in row %}{# une date (AAAA-MM-JJ[ HH:MM[:SS]]) ne se coupe jamais en deux lignes #}{% set is_date = cell is string and cell | length in (10, 16, 19) and cell[4:5] == '-' and cell[:4].isdigit() and cell[7:8] == '-' %}<td{% if loop.index0 in nc %} class="num pk-mono{% if is_date %} nowrap{% endif %}"{% elif is_date %} class="nowrap"{% endif %}>{{ cell | safe }}</td>{% endfor %}</tr>
+<tr class="{{ row_classes[loop.index0] if row_classes else '' }}"{% if limit and loop.index0 >= limit %} data-extra hidden{% endif %}>{% for cell in row %}{# une date (AAAA-MM-JJ[ HH:MM[:SS]]) ne se coupe jamais en deux lignes #}{% set is_date = cell is string and ((cell | length in (10, 16, 19) and cell[4:5] == '-' and cell[:4].isdigit() and cell[7:8] == '-') or cell.startswith('<time class="rel-time"')) %}<td{% if loop.index0 in nc %} class="num pk-mono{% if is_date %} nowrap{% endif %}"{% elif is_date %} class="nowrap"{% endif %}>{{ cell | safe }}</td>{% endfor %}</tr>
 {% endfor %}
 </tbody>
 </table>
@@ -204,7 +204,9 @@
 {% macro lazy_block(url, lines=6, label=none, retry=none) %}
 {% set label = label if label is not none else (ui_t('sb_loading') if ui_t is defined else 'Loading…') %}
 {% set retry = retry if retry is not none else (ui_t('lazy_retry') if ui_t is defined else 'Retry') %}
-<div class="lazy-block" data-lazy-url="{{ url }}" data-label-error="{{ label }}" data-label-retry="{{ retry }}" aria-busy="true" aria-live="polite">
+{# CO10-CO12 : le message d'erreur était le libellé de chargement (« Chargement… » + Réessayer) ; 404 = serveur trop ancien #}
+<div class="lazy-block" data-lazy-url="{{ url }}" data-label-error="{{ ui_t('lazy_error') if ui_t is defined else 'Error' }}" data-label-retry="{{ retry }}"
+     data-label-stale="{{ ui_t('lazy_stale') if ui_t is defined else 'Server too old: restart it.' }}" data-label-timeout="{{ ui_t('lazy_timeout') if ui_t is defined else 'No answer from the server.' }}" aria-busy="true" aria-live="polite">
   <div class="lazy-skeleton" role="status" aria-label="{{ label }}">
     {% for i in range(lines) %}<div class="skeleton-line sk-{{ [100, 86, 94, 72, 90, 80][i % 6] }} sk-gap-lg"></div>{% endfor %}
   </div>

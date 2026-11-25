@@ -153,14 +153,14 @@ def set_initial_capital(conn: sqlite3.Connection, strategy_id: str, initial_capi
 def get_strategy(conn: sqlite3.Connection, strategy_id: str) -> dict | None:
     row = conn.execute(f"SELECT {', '.join(_STRATEGY_COLUMNS)} FROM fund_strategy WHERE strategy_id = ?",
                        (strategy_id,)).fetchone()
-    return dict(zip(_STRATEGY_COLUMNS, row)) if row else None
+    return dict(zip(_STRATEGY_COLUMNS, row, strict=False)) if row else None
 
 
 def list_strategies(conn: sqlite3.Connection, include_archived: bool = False) -> list[dict]:
     sql = f"SELECT {', '.join(_STRATEGY_COLUMNS)} FROM fund_strategy"
     if not include_archived:
         sql += " WHERE archived = 0"
-    return [dict(zip(_STRATEGY_COLUMNS, r)) for r in conn.execute(sql + " ORDER BY created_at, rowid")]
+    return [dict(zip(_STRATEGY_COLUMNS, r, strict=False)) for r in conn.execute(sql + " ORDER BY created_at, rowid")]
 
 
 def update_strategy(conn: sqlite3.Connection, strategy_id: str, **fields) -> None:
@@ -214,7 +214,7 @@ def _order_row(raw: dict) -> dict:
 
 
 def _parse_order(row: tuple) -> dict:
-    o = dict(zip(_ORDER_COLUMNS, row))
+    o = dict(zip(_ORDER_COLUMNS, row, strict=False))
     o["spec"] = json.loads(o.pop("spec_json") or "{}")
     return o
 

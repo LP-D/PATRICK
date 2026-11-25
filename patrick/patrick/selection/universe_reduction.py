@@ -123,7 +123,7 @@ def _clusters(returns: pd.DataFrame, corr_threshold: float) -> dict[str, int]:
         return {s: 1 for s in corr.index}
     link = linkage(squareform(arr, checks=False), method="average")
     labels = fcluster(link, t=1.0 - corr_threshold, criterion="distance")
-    return {sym: int(lab) for sym, lab in zip(corr.index, labels)}
+    return {sym: int(lab) for sym, lab in zip(corr.index, labels, strict=True)}
 
 
 def reduce_on_mask(prices: pd.DataFrame, train_mask, corr_threshold: float,

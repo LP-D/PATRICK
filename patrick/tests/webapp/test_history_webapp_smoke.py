@@ -31,7 +31,7 @@ def _seed_db(tmp_path, monkeypatch) -> None:
     db.add_fold_metrics(conn, trial_id, 2, "test", {"F1_dir": 0.62, "AUC_dir": 0.62})
     db.add_fold_metrics(conn, trial_id, 0, "holdout", {"F1_dir": 0.55})
     db.add_baseline_metrics(conn, "run1", "majority", "test", {"F1_dir": 0.5})
-    db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": 2.1, "p_value": 0.03}, sample="holdout")
+    db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": -2.1, "p_value": 0.03}, sample="holdout")
     db.finish_run(conn, "run1", status="done", n_trials=1)
 
     config_cpcv = default_config_dict()
@@ -69,7 +69,7 @@ def test_runs_explorer_renames_model_without_changing_results(tmp_path, monkeypa
     assert "VIX finaliste" in history_page.text
     detail_page = client.get("/runs/run1")
     assert detail_page.status_code == 200
-    assert "0.03" in detail_page.text
+    assert "0.015" in detail_page.text            # p unilatérale (bilatérale 0,03, modèle meilleur)
 
 
 def test_runs_explorer_rejects_empty_rename(tmp_path, monkeypatch):
@@ -183,7 +183,7 @@ def test_run_detail_page_renders_for_walkforward_run(tmp_path, monkeypatch):
     resp = client.get("/runs/run1")
     assert resp.status_code == 200
     assert "vix_smoke" in resp.text
-    assert "0.03" in resp.text  # p-value DM
+    assert "0.015" in resp.text  # p-value DM unilatérale (25/11)
 
 
 def test_run_detail_shows_phase_durations_and_model_fit_counts(tmp_path, monkeypatch):

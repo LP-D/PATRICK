@@ -22,7 +22,7 @@ def seeded(tmp_path, monkeypatch):
 
 def _emit(conn, info, n=40, hit_rate=0.7, seed=0):
     rng = np.random.default_rng(seed)
-    days = [(np.datetime64("2027-01-04") + i).astype(str) for i in range(n)]
+    days = [(np.datetime64("2027-01-04") + np.timedelta64(i, "D")).astype(str) for i in range(n)]
     ts = [d + " 00:00:00" for d in days]
     trackdb.add_predictions(conn, info["trial_id"], 0, "live", ts, [None] * n, [2.0] * n, [0.6] * n, p_up=[0.62] * n)      # tous prédisent « hausse »
     for t in ts:
@@ -76,3 +76,20 @@ def test_journal_pages_and_api(seeded):
     assert c.get("/api/journal/export.csv").headers["content-type"].startswith("text/csv")
     seal = c.post("/api/journal/seal")
     assert seal.status_code == 200 and seal.json()["sealed"] == 0               # tout est déjà journalisé
+
+
+def test_overview_counts_every_divergence_but_lists_at_most_the_limit(seeded, monkeypatch):
+    """CO7 (25/11) : le total comptait la liste tronquée à `DIVERGENCE_LIMIT`."""
+    conn, info = seeded
+    monkeypatch.setattr(jv, "DIVERGENCE_LIMIT", 3)
+    _emit(conn, info, n=10)
+    conn.execute("UPDATE prediction SET y_pred = 0.0, p_up = 0.05 WHERE trial_id = ? AND split = 'live'", (info["trial_id"],))
+    conn.commit()
+    d = jv.overview(conn)
+    assert d["n_divergences"] == 10 and len(d["divergences"]) == 3
+
+
+def test_next_day_bounds_the_day_and_survives_an_unreadable_value():
+    assert jv._next_day("2027-01-31") == "2027-02-01"
+    assert jv._next_day("2027-12-31 00:00:00") == "2028-01-01"
+    assert jv._next_day("hier") == "hier~"

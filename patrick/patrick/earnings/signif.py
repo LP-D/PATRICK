@@ -92,7 +92,7 @@ def mean_pairwise_correlation(rows: list[dict], idx: list[int], max_events: int 
     width = max(len(rows[i]["resid_est"]) for i in pick)
     total = width + max(shifts) + 1
     mat = np.full((total, len(pick)), np.nan)
-    for c, (i, s) in enumerate(zip(pick, shifts)):
+    for c, (i, s) in enumerate(zip(pick, shifts, strict=True)):
         res = arr(rows[i], "resid_est") / max(rows[i]["sigma"], 1e-12)
         mat[s:s + len(res), c] = res
     corr = pd.DataFrame(mat).corr(min_periods=60).to_numpy()
@@ -224,7 +224,7 @@ def abs_move_test(rows: list[dict], a: int, b: int) -> dict:
     tab = window_table(rows, a, b)
     length = b - a + 1
     pct = []
-    for i, car in zip(tab["i"], tab["car"]):
+    for i, car in zip(tab["i"], tab["car"], strict=True):
         placebo = np.abs(_rolling_sum(arr(rows[i], "resid_est"), length))
         if len(placebo) >= 30:
             pct.append(float((placebo < abs(car)).mean() + 0.5 * (placebo == abs(car)).mean()))

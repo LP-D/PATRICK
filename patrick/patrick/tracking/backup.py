@@ -312,7 +312,7 @@ def backup_database(
         finally:
             dest_conn.close()
     except sqlite3.Error:
-        logger.error("Echec de sqlite3.Connection.backup(), suppression du fichier partiel : %s", part_path)
+        logger.exception("Echec de sqlite3.Connection.backup(), suppression du fichier partiel : %s", part_path)
         if part_path.exists():
             try:
                 part_path.unlink()

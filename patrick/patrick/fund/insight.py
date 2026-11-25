@@ -160,4 +160,4 @@ def replacements(conn: sqlite3.Connection, strategy_id: str, limit: int = 50) ->
     except sqlite3.Error:
         return []
     keys = ("rule_name", "target", "horizon", "old_trial_id", "new_trial_id", "n_orders", "pnl_removed", "replaced_at")
-    return [dict(zip(keys, row)) for row in rows]
+    return [dict(zip(keys, row, strict=False)) for row in rows]

@@ -70,7 +70,7 @@ def best_trial(conn: sqlite3.Connection, run_id: str) -> dict | None:
     if row is None:
         return None
     keys = ("trial_id", "regime", "algo", "sampler", "n_features", "params_json", "artifact_path")
-    return dict(zip(keys, row))
+    return dict(zip(keys, row, strict=False))
 
 
 def model_meta(artifact_path: str | None) -> dict:
@@ -249,7 +249,7 @@ def list_champions(conn: sqlite3.Connection, with_panel: bool = False) -> list[d
         "ORDER BY c.target, c.horizon").fetchall()
     keys = ("target", "horizon", "run_id", "trial_id", "reason", "promoted_at", "holdout_f1_dir",
             "algo", "n_features")
-    out = [dict(zip(keys, r)) for r in rows]
+    out = [dict(zip(keys, r, strict=False)) for r in rows]
     if with_panel:
         panels = holdout_panels(conn, [c["trial_id"] for c in out])
         for c in out:
@@ -270,4 +270,4 @@ def list_archive(conn: sqlite3.Connection, target: str | None = None, horizon: i
            + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY decided_at DESC, archive_id DESC")
     keys = ("archive_id", "target", "horizon", "run_id", "role", "decided_at", "algo", "n_features",
             "wf_metrics_json", "duel_json")
-    return [dict(zip(keys, r)) for r in conn.execute(sql, params).fetchall()]
+    return [dict(zip(keys, r, strict=False)) for r in conn.execute(sql, params).fetchall()]

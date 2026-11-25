@@ -105,7 +105,7 @@ def fit(ctx) -> dict:
     from sklearn.linear_model import Ridge
     ok_ = y.notna()
     m = Ridge(alpha=20.0).fit(Z[ok_].to_numpy(), y[ok_].to_numpy())
-    weights = dict(zip(usable, m.coef_.tolist()))
+    weights = dict(zip(usable, m.coef_.tolist(), strict=True))
     for c in info:
         if c["key"] in weights:
             c["weight"] = weights[c["key"]]

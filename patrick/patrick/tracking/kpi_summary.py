@@ -66,7 +66,7 @@ def _load_trials(conn: sqlite3.Connection, run_ids: list[str]) -> list[dict]:
             f"WHERE t.run_id IN ({marks}) AND t.category = 'global' "
             "AND (t.params_json IS NULL OR t.params_json IN ('{}', ''))", chunk).fetchall()
         keys = ("trial_id", "run_id", "horizon", "target", "algo", "sampler", "n_features", "regime")
-        trials.extend(dict(zip(keys, row)) for row in rows)
+        trials.extend(dict(zip(keys, row, strict=False)) for row in rows)
     by_id = {t["trial_id"]: t for t in trials}
     for t in trials:
         t["folds"] = {}

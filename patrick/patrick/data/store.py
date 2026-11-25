@@ -58,7 +58,7 @@ def _retry_locked(action):
 def _read_json(path: str) -> dict:
     def _load() -> dict:
         try:
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 return json.load(f)
         except FileNotFoundError:
             return {}

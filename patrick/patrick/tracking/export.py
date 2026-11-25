@@ -188,7 +188,7 @@ def export_best_model(pool, target_col: str, feature_pool: list[str], config: Ru
     # `_summarize_result` re-derives this same meta path the same way
     # (`model_path[:-len(".joblib")] + "_meta.json"`).
     meta_path = model_path[: -len(".joblib")] + "_meta.json"
-    with open(meta_path, "w") as f:
+    with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=1)
 
     print(f"[EXPORT] winning model ({algo}, h={horizon}d, {regime}, N={n_feat}) -> {model_path}")

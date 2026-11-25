@@ -11,7 +11,7 @@ import math
 import numpy as np
 import pandas as pd
 
-TD = 252
+from patrick.core.perf import TRADING_DAYS as TD
 
 
 def _f(x) -> float | None:

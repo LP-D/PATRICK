@@ -27,6 +27,7 @@ from patrick.tracking import class_balance
 from patrick.tracking import db as trackdb
 from patrick.tracking import holdout_diagnostic as trackholdout
 from patrick.tracking import stats as trackstats
+from patrick.tracking.run_queries import dm_reading
 from patrick.validation import metric_panel, suspicion
 from patrick.validation.cpcv import n_paths as cpcv_n_paths
 from patrick.validation.cpcv import path_performance_distribution
@@ -191,8 +192,7 @@ def _dm_result_for_run(conn: sqlite3.Connection, run_id: str, kind: str = "class
     ).fetchone()
     if row is None:
         return None
-    return {"baseline": row[0], "dm_stat": row[1], "p_value": row[2], "computed_at": row[3],
-            "sample": row[4], "n_obs": row[5]}
+    return dm_reading(baseline=row[0], dm_stat=row[1], p_value=row[2], computed_at=row[3], sample=row[4], n_obs=row[5])
 
 
 def phase_breakdown_for_run(conn: sqlite3.Connection, run_id: str) -> dict:
@@ -309,7 +309,7 @@ def list_runs(conn: sqlite3.Connection, *, target: str | None = None,
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     rows = conn.execute(
         f"SELECT run.run_id, run.target, run.horizon, run.status, run.started_at, "
-        f"run.finished_at, run.n_trials, run.config_json, dm.p_value, dm.sample "
+        f"run.finished_at, run.n_trials, run.config_json, dm.p_value, dm.sample, dm.dm_stat "
         f"FROM run LEFT JOIN dm_result dm ON dm.run_id = run.run_id AND dm.kind = 'class_specific' "
         f"{where} ORDER BY run.started_at DESC, run.rowid DESC LIMIT ?",
         (*params, limit),
@@ -319,7 +319,8 @@ def list_runs(conn: sqlite3.Connection, *, target: str | None = None,
     headline_by_run = trackdb.batch_best_metrics(conn, [r[0] for r in rows])
 
     out = []
-    for run_id, tgt, horizon, status_, started_at, finished_at, n_trials, config_json, dm_p, dm_sample in rows:
+    for run_id, tgt, horizon, status_, started_at, finished_at, n_trials, config_json, dm_p, dm_sample, dm_stat in rows:
+        dm_p = dm_reading(dm_stat=dm_stat, p_value=dm_p)["p_value"]          # p unilatérale « le modèle fait mieux »
         run_scheme = _run_scheme(config_json)
         if scheme and run_scheme != scheme:
             continue
@@ -924,7 +925,7 @@ def direction_metrics_by_target_and_horizon(conn: sqlite3.Connection, targets: l
     inline: `run_id` is already known per pair from step 1, so this is one
     more flat IN-list query, not a second N+1.
     This is what feeds `/predictions`' ok/warning badge -- same "ok" if
-    `p_value < 0.05` semantics already used on `run_detail.html`, not a
+    `p_value < 0.05` semantics already used on `run_detail.html` (p UNILATÉRALE « le modèle fait mieux » depuis le 25/11, `run_queries.dm_reading`), not a
     new threshold invented for this page. `dm_result` is `None` when the
     resolved run has none yet (CPCV runs skip DM entirely, see
     `run_detail.html`)."""
@@ -974,12 +975,12 @@ def direction_metrics_by_target_and_horizon(conn: sqlite3.Connection, targets: l
     auc_by_trial = dict(auc_rows)
 
     dm_rows = conn.execute(
-        f"SELECT run_id, baseline, p_value, sample FROM dm_result "
+        f"SELECT run_id, baseline, p_value, sample, dm_stat FROM dm_result "
         f"WHERE run_id IN ({run_placeholders}) AND kind = 'class_specific'",
         tuple(run_ids),
     ).fetchall()
-    dm_by_run = {run_id: {"baseline": baseline, "p_value": p_value, "sample": sample}
-                 for run_id, baseline, p_value, sample in dm_rows}
+    dm_by_run = {run_id: dm_reading(baseline=baseline, dm_stat=dm_stat, p_value=p_value, sample=sample)
+                 for run_id, baseline, p_value, sample, dm_stat in dm_rows}
 
     out: dict[tuple[str, int], dict | None] = {}
     for key, (run_id, trial_id) in pair_by_key.items():

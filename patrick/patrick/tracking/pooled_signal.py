@@ -90,7 +90,7 @@ def load(conn: sqlite3.Connection) -> list[dict]:
     cur = conn.execute("SELECT target, horizon, n_runs, n_dates, auc, auc_run_mean, p_value, q_value, significant, computed_at "
                        "FROM pooled_signal ORDER BY q_value IS NULL, q_value, target, horizon")
     return [dict(zip(("target", "horizon", "n_runs", "n_dates", "auc", "auc_run_mean", "p_value", "q_value", "significant", "computed_at"),
-                     row)) for row in cur]
+                     row, strict=True)) for row in cur]
 
 
 def class_summary(rows: list[dict]) -> list[dict]:

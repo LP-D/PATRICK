@@ -1,5 +1,5 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import status_badge, data_table, metric, empty_state, up_down, crumb, asset_panel, lazy_block, mcc_gap %}
+{% from "_components.html" import status_badge, data_table, metric, empty_state, up_down, crumb, asset_panel, lazy_block, mcc_gap, rel_time %}
 {% block title %}PATRICK — {{ target | iname }}{% endblock %}
 
 {% block crumb_trail %}{{ crumb(target | iname) }}{% endblock %}
@@ -149,14 +149,16 @@
 {% set rows = [] %}
 {% for r in detail.runs %}
 {% set state = 'ok' if r.status == 'done' else ('pending' if r.status in ('running', 'queued') else ('error' if r.status in ('failed', 'error') else 'neutral')) %}
-{% set dm_cell = (("%.4f" | format(r.dm_result.p_value)) ~ (' <span class="tag" title="' ~ t('tg_sel_title') ~ '">' ~ t('tg_sel_tag') ~ '</span>' if r.dm_result.sample == 'last_wf_fold' else '')) if r.dm_result else '<span class="na">—</span>' %}
-{% set relaunch_cell = '<form method="post" action="/runs/' ~ r.run_id ~ '/relaunch" class="inline-form"><button type="submit" class="primary">' ~ t('tg_relaunch_all') ~ '</button></form>' %}
+{# p UNILATÉRALE « le modèle fait mieux » (run_queries.dm_reading) ; « moins bon » quand sa perte est plus haute que la référence #}
+{% set dm_cell = (("%.4f" | format(r.dm_result.p_value)) ~ (' <span class="tag" title="' ~ t('tg_sel_title') ~ '">' ~ t('tg_sel_tag') ~ '</span>' if r.dm_result.sample == 'last_wf_fold' else '') ~ (' <span class="tag tag-suspect">' ~ t('tg_dm_worse') ~ '</span>' if r.dm_result.worse else '')) if r.dm_result and r.dm_result.p_value is not none else '<span class="na">—</span>' %}
+{# CO14 : un clic relançait un run de plusieurs heures sans confirmation (static/confirm.js lit data-confirm) #}
+{% set relaunch_cell = '<form method="post" action="/runs/' ~ r.run_id ~ '/relaunch" class="inline-form" data-confirm="' ~ t('tg_relaunch_confirm') ~ '" data-confirm-label="' ~ t('tg_relaunch_all') ~ '"><button type="submit" class="btn-secondary">' ~ t('tg_relaunch_all') ~ '</button></form>' %}
 {% set _ = rows.append([
     '<a href="/runs/' ~ r.run_id ~ '/detail">' ~ (r.name or r.run_id) ~ '</a>',
     r.horizon | hlabel,
     ('CPCV' if r.scheme == 'cpcv' else 'walk-forward'),
     status_badge(r.status, state),
-    r.started_at or '—',
+    rel_time(r.started_at),
     r.n_trials if r.n_trials is not none else '<span class="na">—</span>'] + panel_cells(r.panel) + [
     mcc_gap(r.panel, r.benchmark_mcc),
     dm_cell,
@@ -223,7 +225,7 @@
     (('<span title="' ~ r.benchmark ~ '">' ~ (r.benchmark | iname_h) ~ '</span>') if r.benchmark else '—'),
     r.horizon | hlabel,
     status_badge(r.status, state),
-    r.started_at or '—'] + panel_cells(r.panel) + [
+    rel_time(r.started_at)] + panel_cells(r.panel) + [
     r.holdout_panel.AUC_dir | pmfmt('AUC_dir'),
     r.holdout_panel.Brier_up | pmfmt('Brier_up'),
 ]) %}

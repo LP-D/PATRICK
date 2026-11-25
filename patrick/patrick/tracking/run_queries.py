@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import html
 import json
+import math
 import sqlite3
 
 from patrick.config.defaults import ALL_DL_ALGOS
@@ -15,6 +16,17 @@ from patrick.config.target_label import ALPHA_SEP, VALUE_SUFFIX
 from patrick.tracking import class_balance
 from patrick.tracking.db import status_label
 from patrick.validation import metric_panel, suspicion
+from patrick.validation.diebold_mariano import one_sided_better_p
+
+
+def dm_reading(*, dm_stat, p_value, **fields) -> dict:
+    """Résultat Diebold-Mariano tel que les pages le lisent (CO2/CO3 du 25/11).
+
+    `dm_result.p_value` est BILATÉRALE (ADR 0003) : la comparer telle quelle au seuil affichait « significatif » pour un modèle
+    nettement MOINS BON que sa référence. `p_value` devient ici la p unilatérale « le modèle fait mieux » ; la bilatérale reste dans
+    `p_two_sided` et `worse` dit que le modèle a la perte la plus haute."""
+    worse = dm_stat is not None and not math.isnan(float(dm_stat)) and float(dm_stat) > 0
+    return {**fields, "dm_stat": dm_stat, "p_value": one_sided_better_p(p_value, dm_stat), "p_two_sided": p_value, "worse": worse}
 
 
 def _chunks(items: list, size: int = 500):
@@ -157,8 +169,7 @@ def batch_dm_results(conn: sqlite3.Connection, run_ids: list[str],
         return {}
     placeholders = ",".join("?" for _ in run_ids)
     return {
-        run_id: {"baseline": baseline, "dm_stat": dm_stat, "p_value": p_value, "computed_at": computed_at,
-                 "sample": sample}
+        run_id: dm_reading(baseline=baseline, dm_stat=dm_stat, p_value=p_value, computed_at=computed_at, sample=sample)
         for run_id, baseline, dm_stat, p_value, computed_at, sample in conn.execute(
             f"SELECT run_id, baseline, dm_stat, p_value, computed_at, sample FROM dm_result "
             f"WHERE run_id IN ({placeholders}) AND kind = ?",

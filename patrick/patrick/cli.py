@@ -212,7 +212,7 @@ def report_cmd(
         path = report_module.save_report(run_id, output_path=output, fdr_alpha=fdr_alpha)
     except ValueError as exc:
         typer.echo(str(exc))
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
     typer.echo(f"Rapport généré : {path}")
 
 
@@ -313,7 +313,7 @@ def serve_cmd(
         import uvicorn
     except ImportError:
         typer.echo("Dépendances web manquantes. Installe-les avec : pip install -e \".[web]\"")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
     typer.echo(f"patrick web sur http://{host}:{port}")
     uvicorn.run("patrick.webapp.app:app", host=host, port=port, reload=reload)
 
@@ -364,7 +364,7 @@ def audit_degradation_cmd(
         result = audit_module.run_degradation_audit(targets=target_list, seed=seed, output_dir=output_dir)
     except RuntimeError as exc:
         typer.echo(str(exc))
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     typer.echo(f"\n[TERMINÉ] {len(result['rows'])} lignes -- "
                f"CSV : {result['csv_path']} -- markdown : {result['md_path']}")

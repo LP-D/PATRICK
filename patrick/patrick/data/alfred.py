@@ -173,7 +173,7 @@ def assemble(series_id: str, releases: pd.DataFrame, current: pd.Series, first_v
 def _to_payload(releases: pd.DataFrame, current: pd.Series, first_vintage: str | None, start: str) -> dict:
     return {"start": start, "first_vintage": first_vintage,
             "releases": [[d.strftime("%Y-%m-%d"), r.strftime("%Y-%m-%d"), v]
-                         for d, r, v in zip(releases["obs_date"], releases["release_date"], releases["value"])]
+                         for d, r, v in zip(releases["obs_date"], releases["release_date"], releases["value"], strict=True)]
             if not releases.empty else [],
             "current": [[d.strftime("%Y-%m-%d"), float(v)] for d, v in current.items()]}
 

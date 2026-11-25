@@ -199,9 +199,10 @@ def register(app: FastAPI, templates, context) -> None:
         if what not in OPEN_TARGETS:
             raise HTTPException(status_code=400, detail="Dossier inconnu.")
         target = paths().get(what)
-        if not target or not Path(target).is_dir():
+        # CO13 : accès disque hors de la boucle asynchrone (un dossier synchronisé lent gelait tout le serveur)
+        if not target or not await run_in_threadpool(Path(target).is_dir):
             raise HTTPException(status_code=404, detail="Dossier introuvable.")
-        open_in_explorer(Path(target))
+        await run_in_threadpool(open_in_explorer, Path(target))
         return {"ok": True}
 
     @app.post("/api/app/shortcuts")
@@ -211,7 +212,7 @@ def register(app: FastAPI, templates, context) -> None:
 
     @app.post("/api/app/backup-now")
     async def backup_now(request: Request):
-        if not os.path.exists(_db_path()):
+        if not await run_in_threadpool(os.path.exists, _db_path()):
             return JSONResponse({"error": "Pas de base à sauvegarder."}, status_code=400)
         spawn_backup()
         return {"ok": True}

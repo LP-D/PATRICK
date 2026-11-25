@@ -115,7 +115,7 @@ def search_threshold(cal_clf, X_val: np.ndarray, y_val: np.ndarray,
     for thr in thresholds:
         pred = []
         for row in proba:
-            p_map = dict(zip(classes, row))
+            p_map = dict(zip(classes, row, strict=True))
             if p_map.get(3, 0.0) >= thr:
                 pred.append(3)
             elif p_map.get(0, 0.0) >= thr:
@@ -134,7 +134,7 @@ def predict_with_threshold(cal_clf, X: np.ndarray, threshold: float) -> np.ndarr
     classes = cal_clf.classes_
     pred = []
     for row in proba:
-        p_map = dict(zip(classes, row))
+        p_map = dict(zip(classes, row, strict=True))
         if p_map.get(3, 0.0) >= threshold:
             pred.append(3)
         elif p_map.get(0, 0.0) >= threshold:

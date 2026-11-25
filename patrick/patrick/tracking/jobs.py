@@ -126,7 +126,7 @@ def finish_job(conn: sqlite3.Connection, job_id: str, status: str,
 
 
 def _row_to_dict(row) -> dict:
-    d = dict(zip(_JOB_COLUMNS, row))
+    d = dict(zip(_JOB_COLUMNS, row, strict=False))
     d["log_tail"] = json.loads(d["log_tail"]) if d["log_tail"] else []
     return d
 

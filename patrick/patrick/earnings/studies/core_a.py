@@ -86,11 +86,11 @@ def core_event_study(ctx: Ctx, p: dict) -> dict:
         mean = np.nanmean(cum, axis=0)
         se = np.nanstd(cum, axis=0, ddof=1) / np.sqrt(np.maximum(count, 1))
     keep = count >= max(4, int(0.5 * len(rows)))
-    xs = [d for d, k in zip(range(PATH_LO, PATH_HI + 1), keep) if k]
+    xs = [d for d, k in zip(range(PATH_LO, PATH_HI + 1), keep, strict=True) if k]
     blocks.append(line("CAAR moyen cumulé depuis J−10 (événements empilés)", xs,
-                       [{"name": "CAAR", "y": [float(m) for m, k in zip(mean, keep) if k]}], "séances relatives à J0", "pct",
-                       band={"lo": [float(m - 1.96 * s) for m, s, k in zip(mean, se, keep) if k],
-                             "hi": [float(m + 1.96 * s) for m, s, k in zip(mean, se, keep) if k]}))
+                       [{"name": "CAAR", "y": [float(m) for m, k in zip(mean, keep, strict=True) if k]}], "séances relatives à J0", "pct",
+                       band={"lo": [float(m - 1.96 * s) for m, s, k in zip(mean, se, keep, strict=True) if k],
+                             "hi": [float(m + 1.96 * s) for m, s, k in zip(mean, se, keep, strict=True) if k]}))
     u = []
     for a, b in ((0, 0), (0, 1)):
         r = signif.abs_move_test(rows, a, b)

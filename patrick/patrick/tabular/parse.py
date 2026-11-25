@@ -114,7 +114,7 @@ def to_numbers(values) -> tuple[pd.Series, dict]:
     dec = decimal_separator(texts)
     thousands = "." if dec == "," else ","
     n_pct = 0
-    for t, i, (pct, neg) in zip(texts, positions, flags):
+    for t, i, (pct, neg) in zip(texts, positions, flags, strict=True):
         try:
             x = float(t.replace(thousands, "").replace(dec, "."))
         except ValueError:

@@ -526,7 +526,7 @@ def list_excluded_symbols(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
         "SELECT symbol, reason, excluded_at FROM excluded_symbol ORDER BY excluded_at"
     ).fetchall()
-    return [dict(zip(("symbol", "reason", "excluded_at"), row)) for row in rows]
+    return [dict(zip(("symbol", "reason", "excluded_at"), row, strict=False)) for row in rows]
 
 
 def add_data_quality_issues(conn: sqlite3.Connection, snapshot_id: str, issues: list[dict]) -> None:
@@ -584,7 +584,7 @@ def list_data_quality_issues(conn: sqlite3.Connection, snapshot_id: str) -> list
     rows = conn.execute(
         "SELECT series, reason, detail FROM data_quality_issue WHERE snapshot_id = ? ORDER BY id",
         (snapshot_id,)).fetchall()
-    return [dict(zip(("series", "reason", "detail"), row)) for row in rows]
+    return [dict(zip(("series", "reason", "detail"), row, strict=False)) for row in rows]
 
 
 def save_phase9_snapshot(conn: sqlite3.Connection, snapshot_name: str, state: dict) -> int:
@@ -920,7 +920,7 @@ def get_run(conn: sqlite3.Connection, run_id: str) -> dict | None:
     row = conn.execute(
         f"SELECT {', '.join(_RUN_COLUMNS)} FROM run WHERE run_id = ?", (run_id,)
     ).fetchone()
-    return dict(zip(_RUN_COLUMNS, row)) if row else None
+    return dict(zip(_RUN_COLUMNS, row, strict=False)) if row else None
 
 
 def rename_run(conn: sqlite3.Connection, run_id: str, name: str) -> None:
@@ -964,7 +964,7 @@ def list_screening_decisions(conn: sqlite3.Connection, run_id: str) -> list[dict
         (run_id,),
     )
     keys = ("horizon", "regime", "n_features", "sampler", "algo", "score", "rank", "decision", "reason")
-    return [dict(zip(keys, row)) for row in cursor.fetchall()]
+    return [dict(zip(keys, row, strict=False)) for row in cursor.fetchall()]
 
 
 USER_STOPPED_ERROR = "Stopped by user."        # `run.error` d'un run arrêté à la main (`jobs.finish_user_stopped_job`)
@@ -1171,7 +1171,7 @@ def add_predictions(conn: sqlite3.Connection, trial_id: int, fold_index: int, sp
     flag = None if p_up_calibrated is None else int(bool(p_up_calibrated))
     rows = [(trial_id, str(t), fold_index, split, float(yt) if yt is not None else None, float(yp),
               _f(yp_proba), path_id, _f(up), flag)
-            for t, yt, yp, yp_proba, up in zip(ts, y_true, y_pred, proba, ups)]
+            for t, yt, yp, yp_proba, up in zip(ts, y_true, y_pred, proba, ups, strict=True)]
     with conn:
         conn.executemany(
             "INSERT OR REPLACE INTO prediction (trial_id, ts, fold_index, split, y_true, "
@@ -1181,7 +1181,7 @@ def add_predictions(conn: sqlite3.Connection, trial_id: int, fold_index: int, sp
         if y_value is not None:
             # Valeur exacte (migration 0055) : rendement prédit, écrit à part pour laisser l'insertion commune inchangée.
             conn.executemany("UPDATE prediction SET y_value = ? WHERE trial_id = ? AND ts = ? AND path_id = ?",
-                             [(_f(v), trial_id, str(t), path_id) for t, v in zip(ts, y_value)])
+                             [(_f(v), trial_id, str(t), path_id) for t, v in zip(ts, y_value, strict=True)])
     if split == "live":
         # Journal chaîné (migration 0040) : le signal est scellé AVANT son issue, le premier écrit gagne. Une erreur du journal n'empêche pas la prédiction.
         from patrick.tracking import journal
