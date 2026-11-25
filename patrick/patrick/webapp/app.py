@@ -1299,8 +1299,11 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
                    started_after: date | None = None, started_before: date | None = None,
                    min_duration_s: float | None = Query(default=None, ge=0),
                    max_duration_s: float | None = Query(default=None, ge=0),
-                   ordre: str | None = None, mesure: str | None = None):
+                   ordre: str | None = None, mesure: str | None = None, compare: str | None = None):
     """Phase 7.1 — full run-history explorer.
+
+    `compare=<run_id>` (onglet « Comparer » de la page d'un run, A28) : sans cible choisie, la liste se restreint d'office à la cible de ce run
+    (comparer un modèle de l'or à un modèle du CAC n'apprend rien) ; la page de comparaison signale ensuite des profils différents.
 
     Deux vues sur la même page : la liste des runs (défaut) et, avec `vue=analyses`, les analyses transverses (carte cible × horizon, scores
     par algorithme, nuage RL — ancienne page `/analyses`, dessinées par `analyses_hub.js`).
@@ -1318,6 +1321,9 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
         raise HTTPException(status_code=400, detail="La durée minimale dépasse la durée maximale.")
     conn = trackdb.connect()
     try:
+        if compare and not target:
+            row = conn.execute("SELECT target FROM run WHERE run_id = ?", (compare,)).fetchone()
+            target = row[0] if row else None
         index = trackdb.list_run_index(conn)
         every = {"ml": [r for r in index if r["family"] != "dl"], "dl": [r for r in index if r["family"] == "dl"], "rl": _rl_history_rows()}
         if vue == "analyses":
