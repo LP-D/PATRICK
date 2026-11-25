@@ -51,12 +51,28 @@
 {% elif a.benchmark %}
 {{ metric("vs " ~ (a.benchmark | iname), "—", t('pat_bench_na'), "pending") }}
 {% endif %}
+{% if vs_fund %}
+{{ metric(t('pat_vs_fund', f=vs_fund.name), vs_fund.gap | pct(2, true), t('pat_vs_fund_rel', a=(vs_fund.account | pct(2, true)), b=(vs_fund.fund | pct(2, true)), s=vs_fund.start, e=vs_fund.end),
+          "ok" if vs_fund.gap >= 0 else "warning") }}
+{% endif %}
 {% set proxied = [] %}
 {% for p in detail.risk.proxied or [] %}{% set _ = proxied.append(p.symbol ~ " " ~ t('pat_via') ~ " " ~ p.proxy ~ " × " ~ ("%.1f" | format(p.scale)) ~ (" (" ~ t('pat_prior') ~ ")" if p.scale_source == "prior" else " (" ~ t('pat_estimated') ~ ")")) %}{% endfor %}
 {{ metric(t('pat_risk'), (detail.risk.volatility | pct) if detail.risk.volatility is not none else "—",
           t('pat_risk_a') ~ ((" ; " ~ t('pat_risk_b') ~ (perf.volatility | pct)) if perf.volatility is not none else "") ~ ((" ; " ~ t('pat_risk_c') ~ (perf.max_drawdown | pct)) if perf.max_drawdown is not none else "") ~ ((" ; " ~ t('pat_vol_e') ~ (proxied | join(', ')) ~ " — " ~ t('pat_risk_d')) if proxied else "") ~ ".",
           ("warning" if proxied else "neutral") if detail.risk.volatility is not none else "pending") }}
 </div>
+{# FO19 (25/11) : comparer ce compte réel à un fonds simulé #}
+{% if strategies %}
+<form method="get" class="inline-form vs-fund-form">
+  <label>{{ t('pat_vs_fund_pick') }}
+    <select name="vs" onchange="this.form.submit()">
+      <option value="">—</option>
+      {% for s in strategies %}<option value="{{ s.strategy_id }}"{% if vs == s.strategy_id %} selected{% endif %}>{{ s.name }}{% if s.wrapper %} ({{ s.wrapper }}){% endif %}</option>{% endfor %}
+    </select>
+  </label>
+  <noscript><button type="submit" class="btn-secondary">OK</button></noscript>
+</form>
+{% endif %}
 
 <section class="card">
   <div class="card-head">

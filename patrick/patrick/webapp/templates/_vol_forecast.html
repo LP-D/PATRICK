@@ -7,6 +7,10 @@
 <div class="metric-grid">
   {{ metric(t('vf_next'), pct(vf.sigma, 2), t('vf_annual', v=pct(vf.sigma * 15.8745, 1)), 'neutral') }}
   {{ metric(t('vf_trailing'), pct(vf.trailing, 2), t('vf_annual', v=pct((vf.trailing or 0) * 15.8745, 1)), 'neutral') }}
+  {% if vf.implied %}
+  {{ metric(t('vf_implied', i=vf.implied.index), pct(vf.implied.implied, 1), t('vf_implied_sub', r=(('%.2f' | format(vf.implied.ratio)) | replace('.', ',' if lang == 'fr' else '.'))),
+            'neutral' if vf.implied.premium_var >= 0 else 'warning') }}
+  {% endif %}
   {% if vf.eval and vf.eval.skill is not none %}
   {{ metric(t('vf_skill'), (('%+.1f' | format(100 * vf.eval.skill)) | replace('.', ',' if lang == 'fr' else '.')) ~ ' %', t('vf_skill_sub', n=vf.eval.n),
             'ok' if vf.eval.skill > 0 else 'warning') }}

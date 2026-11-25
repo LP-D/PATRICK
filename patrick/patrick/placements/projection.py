@@ -128,6 +128,7 @@ def project(panel: pd.DataFrame, w: pd.Series, euro_keys: list[str], env: dict, 
     taxes = np.array([envelopes.exit_tax(g, sim["invested"], years, env, t, couple)["total"] for g, t in zip(gains, sim["taxed"], strict=True)])
     net = W - taxes
     goal = contrib.get("goal") or 0.0
+    needed = monthly_needed(port_paths, euro_paths, euro_share, env, contrib, months, years, goal, couple) if goal > 0 else None
     # Éventail MENSUEL (un point par mois, plus précis que la fin de chaque année) ; `fan_step` le dit aux lecteurs.
     fan = {f"p{q:02d}": [float(contrib["initial"])] + [round(float(row[i]), 2) for row in sim["monthly_q"]] for i, q in enumerate(QUANTILES)}
     saving = sim["invested"] * env["tmi_in"] / 100 if env.get("deductible") else 0.0
@@ -139,7 +140,44 @@ def project(panel: pd.DataFrame, w: pd.Series, euro_keys: list[str], env: dict, 
         "net_irr_median": irr_constant(contrib, years, float(np.median(net))), "fan": fan, "fan_step": "month",
         "centering": "prudent" if target_annual is not None else "historique",
         "dist_net": distribution(net),
+        "monthly_needed": needed,
     }
+
+
+def _prob_goal(port_paths, euro_paths, euro_share, env, contrib, months, years, goal, couple) -> float:
+    sim = simulate(port_paths, euro_paths, euro_share, env, contrib, months)
+    gains = sim["W"] - sim["invested"] - sim["abond"]
+    taxes = np.array([envelopes.exit_tax(g, sim["invested"], years, env, t, couple)["total"] for g, t in zip(gains, sim["taxed"], strict=True)])
+    return float(((sim["W"] - taxes) >= goal).mean())
+
+
+def monthly_needed(port_paths, euro_paths, euro_share, env, contrib, months, years, goal, couple=False, probs=(0.5, 0.8),
+                   n_paths: int = 600, iters: int = 14) -> dict:
+    """Versement mensuel qui atteint l'objectif avec la probabilité `p` (FO21 du 25/11) : `{"p50": €, "p80": €}`.
+
+    Même tirage de trajectoires que la projection (les `n_paths` premières, pour le temps de calcul), recherche par dichotomie du versement
+    mensuel, les autres versements (initial, annuel) inchangés. `0` : l'objectif est déjà atteint sans versement ; `None` : hors de portée
+    même avec un versement égal à l'objectif divisé par le nombre de mois (un rendement négatif sur la plupart des trajectoires)."""
+    pp, ep = port_paths[:n_paths], euro_paths[:n_paths]
+    out: dict = {}
+    hi_cap = max(goal / max(months, 1) * 2.0, 1.0)
+    for p in probs:
+        key = f"p{round(p * 100)}"
+        if _prob_goal(pp, ep, euro_share, env, {**contrib, "monthly": 0.0}, months, years, goal, couple) >= p:
+            out[key] = 0.0
+            continue
+        if _prob_goal(pp, ep, euro_share, env, {**contrib, "monthly": hi_cap}, months, years, goal, couple) < p:
+            out[key] = None
+            continue
+        lo, hi = 0.0, hi_cap
+        for _ in range(iters):
+            mid = (lo + hi) / 2
+            if _prob_goal(pp, ep, euro_share, env, {**contrib, "monthly": mid}, months, years, goal, couple) >= p:
+                hi = mid
+            else:
+                lo = mid
+        out[key] = round(hi, 0)
+    return out
 
 
 def distribution(x: np.ndarray, bins: int = 36) -> dict:

@@ -174,6 +174,15 @@ def _deep_contributions(model, full_pool, feature_names, scaler, sel_idx, ts, pr
     return contrib, base_value, "probability"
 
 
+
+def plain_summary(contributions: list[dict], top: int = 3) -> dict:
+    """Explication en clair d'une prédiction (FO17 du 25/11), sans modèle de langage : les `top` variables qui ont le plus POUSSÉ vers la
+    classe prédite et celles qui l'ont le plus RETENUE, avec leur valeur du jour. `{"for": [{name, value, shap}], "against": [...]}`."""
+    pushing = [c for c in contributions if c.get("shap", 0) > 0][:top]
+    holding = [c for c in contributions if c.get("shap", 0) < 0][:top]
+    return {"for": pushing, "against": holding}
+
+
 def explain_last_prediction(target: str, horizon: int, db_path: str | None = None,
                              store: DataStore | None = None) -> dict | None:
     """Returns per-feature SHAP contributions for the most recent recorded
@@ -307,6 +316,7 @@ def explain_last_prediction(target: str, horizon: int, db_path: str | None = Non
             "y_proba": latest["y_proba"],
             "base_value": base_value, "final_value": final_value,
             "contributions": contributions, "n_features_total": len(feature_names),
+            "plain": plain_summary(contributions),
         }
         if data_snapshot_id is not None:
             cache_tables.save_cached_shap(conn, *cache_key, result)

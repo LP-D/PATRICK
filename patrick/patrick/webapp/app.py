@@ -2790,8 +2790,12 @@ def target_shap_waterfall(ticker: str, horizon: int):
     if result is None:
         return JSONResponse({"ok": False, "message": "Aucune prédiction exploitable pour cet horizon."})
     svg = shap_chart.render_waterfall_svg(result["base_value"], result["contributions"], result["final_value"])
+    from patrick.live.explain import (
+        plain_summary,  # FO17 : aussi pour une explication déjà en cache, d'avant le champ
+    )
+    plain = result.get("plain") or plain_summary(result["contributions"])
     return JSONResponse({
-        "ok": True, "svg": svg, "ts": result["ts"], "split": result["split"],
+        "ok": True, "svg": svg, "ts": result["ts"], "split": result["split"], "plain": plain,
         "y_pred": result["y_pred"], "y_pred_label": result["y_pred_label"],
         "y_proba": result["y_proba"], "n_features_total": result["n_features_total"],
         "units": result.get("units", "raw"),
