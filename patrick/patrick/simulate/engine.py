@@ -498,7 +498,7 @@ def _trade_returns(exposure: pd.Series, strategy_returns: pd.Series) -> pd.Serie
     is_open = exposure.abs() > 1e-9
     segment_id = (is_open != is_open.shift(1)).cumsum()
     out = []
-    for seg, group in strategy_returns.groupby(segment_id):
+    for _seg, group in strategy_returns.groupby(segment_id):
         if not is_open.loc[group.index[0]]:
             continue
         out.append(float((1 + group).prod() - 1))

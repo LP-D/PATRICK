@@ -1,0 +1,9 @@
+#!/bin/sh
+# Graphe du code à jour après chaque fusion tirée (AM28 du 25/11) : `git pull` déclenche `graphify update .` en arrière-plan,
+# pour que les questions sur le code (graphify query) lisent le code du jour. Sans graphify ou sans graphe déjà construit : rien.
+# Activation, une fois par copie du dépôt : git config core.hooksPath .githooks (comme pre-push).
+
+if command -v graphify >/dev/null 2>&1 && [ -f graphify-out/graph.json ]; then
+    (graphify update . >/dev/null 2>&1 &)
+fi
+exit 0

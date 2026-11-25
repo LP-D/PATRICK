@@ -119,7 +119,13 @@ def cancel(conn: sqlite3.Connection, limit_id: int) -> dict:
     return get(conn, limit_id)
 
 
+_UPDATABLE = frozenset({"status", "message", "filled_quantity", "fills_json", "checked_through"})
+
+
 def _update(conn: sqlite3.Connection, limit_id: int, **fields) -> None:
+    unknown = set(fields) - _UPDATABLE                # AM15 : les noms de colonnes entrent dans le texte SQL, jamais une clé inconnue
+    if unknown:
+        raise ValueError(f"colonne(s) non modifiable(s) : {sorted(unknown)}")
     sets = ", ".join(f"{k} = ?" for k in fields) + ", updated_at = datetime('now')"
     with conn:
         conn.execute(f"UPDATE fund_limit_order SET {sets} WHERE limit_id = ?", (*fields.values(), limit_id))  # noms de colonnes internes
@@ -150,10 +156,12 @@ def resolve(conn: sqlite3.Connection, strategy_id: str | None = None, today: dt.
     changed = []
     for limit_id in ids:
         row = get(conn, limit_id)
+        if row is None:                               # CO27 : ordre annulé ou supprimé entre la liste et sa lecture
+            continue
         before = (row["status"], row["filled_quantity"])
         _resolve_one(conn, row, today, bars_loader)
         after = get(conn, limit_id)
-        if (after["status"], after["filled_quantity"]) != before:
+        if after is not None and (after["status"], after["filled_quantity"]) != before:
             changed.append(after)
     return changed
 

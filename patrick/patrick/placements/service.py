@@ -214,7 +214,7 @@ def analyse(navs: pd.DataFrame, labels: dict[str, str], cash: str | None, params
     # -- statistiques des fonds
     say(0.08, "Statistiques des fonds")
     stat_windows = {"12 mois": end - pd.DateOffset(years=1), "5 ans": end - pd.DateOffset(years=5)}
-    for label, panel in windows:
+    for label, _panel in windows:
         stat_windows[f"depuis {label}"] = pd.Timestamp(label)
     stat_windows["historique complet"] = pd.Timestamp("1990-01-01")
     fund_stats = []

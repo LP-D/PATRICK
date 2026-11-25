@@ -52,7 +52,7 @@ def j_season_order(ctx: Ctx, p: dict) -> dict:
     df = ctx.df.copy()
     df["season"] = df["day0"].dt.year.astype(str) + "T" + df["day0"].dt.quarter.astype(str)
     recs = []
-    for (sector, season), g in df.groupby(["sector", "season"]):
+    for (sector, _season), g in df.groupby(["sector", "season"]):
         if sector == "—" or len(g) < 3:
             continue
         g = g.sort_values("day0")

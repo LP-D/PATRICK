@@ -140,7 +140,7 @@ def _add_history(df: pd.DataFrame) -> pd.DataFrame:
     df["beat_streak"] = g["beat"].transform(streak)
     # moyenne passée des réactions du secteur (tous titres, événements dont J0 est strictement antérieur)
     df["sector_hist_abs_z"] = np.nan
-    for sector, part in df.groupby("sector"):
+    for _sector, part in df.groupby("sector"):
         part = part.sort_values("day0")
         days = part["day0"].to_numpy()
         vals = part["z_abs"].to_numpy(dtype=float)
