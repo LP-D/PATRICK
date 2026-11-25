@@ -94,7 +94,7 @@ def _now() -> str:
 def get_alias(conn, alias: str) -> dict | None:
     ensure_schema(conn)
     row = conn.execute("SELECT alias, symbol, adr_symbol, display, source FROM earn_alias WHERE alias = ?", (alias,)).fetchone()
-    return dict(zip(("alias", "symbol", "adr_symbol", "display", "source"), row)) if row else None
+    return dict(zip(("alias", "symbol", "adr_symbol", "display", "source"), row, strict=False)) if row else None
 
 
 def put_alias(conn, alias: str, symbol: str, adr_symbol: str | None = None, display: str | None = None, source: str = "user") -> None:
@@ -110,7 +110,7 @@ def put_alias(conn, alias: str, symbol: str, adr_symbol: str | None = None, disp
 def list_aliases(conn) -> list[dict]:
     ensure_schema(conn)
     rows = conn.execute("SELECT alias, symbol, adr_symbol, display, source FROM earn_alias ORDER BY alias").fetchall()
-    return [dict(zip(("alias", "symbol", "adr_symbol", "display", "source"), r)) for r in rows]
+    return [dict(zip(("alias", "symbol", "adr_symbol", "display", "source"), r, strict=False)) for r in rows]
 
 
 def delete_alias(conn, alias: str) -> None:
@@ -146,7 +146,7 @@ def batch_items(conn, batch_id: int) -> list[dict]:
                         (batch_id,)).fetchall()
     out = []
     for r in rows:
-        d = dict(zip(_ITEM_COLS, r))
+        d = dict(zip(_ITEM_COLS, r, strict=False))
         d["candidates"] = json.loads(d.pop("candidates_json") or "[]")
         d["flags"] = json.loads(d.pop("flags_json") or "[]")
         out.append(d)
@@ -157,7 +157,7 @@ def get_batch(conn, batch_id: int) -> dict | None:
     ensure_schema(conn)
     row = conn.execute("SELECT batch_id, created_at, anchor_monday, raw_text, status FROM earn_batch WHERE batch_id = ?",
                        (batch_id,)).fetchone()
-    return dict(zip(("batch_id", "created_at", "anchor_monday", "raw_text", "status"), row)) if row else None
+    return dict(zip(("batch_id", "created_at", "anchor_monday", "raw_text", "status"), row, strict=False)) if row else None
 
 
 def latest_batch(conn) -> dict | None:
@@ -171,7 +171,7 @@ def list_batches(conn, limit: int = 12) -> list[dict]:
     rows = conn.execute("SELECT b.batch_id, b.created_at, b.anchor_monday, b.status, COUNT(i.item_id) "
                         "FROM earn_batch b LEFT JOIN earn_batch_item i USING (batch_id) GROUP BY b.batch_id "
                         "ORDER BY b.batch_id DESC LIMIT ?", (limit,)).fetchall()
-    return [dict(zip(("batch_id", "created_at", "anchor_monday", "status", "n_items"), r)) for r in rows]
+    return [dict(zip(("batch_id", "created_at", "anchor_monday", "status", "n_items"), r, strict=False)) for r in rows]
 
 
 def update_item(conn, item_id: int, **fields) -> None:
@@ -232,7 +232,7 @@ def calendar_for(conn, symbol: str, since: str | None = None) -> list[dict]:
         sql += " AND ann_date >= ?"
         args.append(since)
     rows = conn.execute(sql + " ORDER BY ann_date", args).fetchall()
-    return [dict(zip(_CAL_COLS, r)) for r in rows]
+    return [dict(zip(_CAL_COLS, r, strict=False)) for r in rows]
 
 
 def calendar_fetched_at(conn, symbol: str) -> str | None:
@@ -248,7 +248,7 @@ def all_calendar(conn, symbols: list[str] | None = None) -> list[dict]:
     if symbols:
         sql += f" WHERE symbol IN ({','.join('?' * len(symbols))})"
         args = list(symbols)
-    return [dict(zip(_CAL_COLS, r)) for r in conn.execute(sql + " ORDER BY symbol, ann_date", args).fetchall()]
+    return [dict(zip(_CAL_COLS, r, strict=False)) for r in conn.execute(sql + " ORDER BY symbol, ann_date", args).fetchall()]
 
 
 # ----------------------------------------------------------------------------------------------------------- instrument

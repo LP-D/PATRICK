@@ -160,7 +160,7 @@ def _export(rows: list[dict], output_dir: str) -> tuple[str, str]:
     fieldnames = ["target", "configuration", *METRIC_COLUMNS, "fred_source", "n_evaluations"]
 
     csv_path = os.path.join(output_dir, "degradation_audit.csv")
-    with open(csv_path, "w", newline="") as f:
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
@@ -169,7 +169,7 @@ def _export(rows: list[dict], output_dir: str) -> tuple[str, str]:
     header = "| " + " | ".join(fieldnames) + " |"
     sep = "|" + "|".join(["---"] * len(fieldnames)) + "|"
     body = "\n".join("| " + " | ".join(str(row.get(c, "")) for c in fieldnames) + " |" for row in rows)
-    with open(md_path, "w") as f:
+    with open(md_path, "w", encoding="utf-8") as f:
         f.write(f"{header}\n{sep}\n{body}" + "\n")
 
     return csv_path, md_path

@@ -270,7 +270,7 @@ def cluster_ols(y, X, clusters, names: list[str]) -> dict:
     dof = max(g - 1, 1)
     p = 2 * stats.t.sf(np.abs(t), dof)
     ss_tot = ((y - y.mean()) ** 2).sum()
-    return {"n": n, "coef": dict(zip(names, beta.tolist())), "t": dict(zip(names, t.tolist())), "p": dict(zip(names, p.tolist())),
+    return {"n": n, "coef": dict(zip(names, beta.tolist(), strict=True)), "t": dict(zip(names, t.tolist(), strict=True)), "p": dict(zip(names, p.tolist(), strict=True)),
             "r2": float(1 - (resid ** 2).sum() / ss_tot) if ss_tot > 0 else np.nan, "n_clusters": g}
 
 

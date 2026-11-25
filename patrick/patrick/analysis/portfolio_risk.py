@@ -21,11 +21,11 @@ import numpy as np
 import pandas as pd
 
 from patrick.analysis import stats_core as sc
+from patrick.core.perf import TRADING_DAYS
 from patrick.features._utils import safe_pct_change
 from patrick.tracking.hrp import hrp_weights
 from patrick.wealth import ledger, performance
 
-TRADING_DAYS = 252
 MAX_POINTS = 700
 LEVELS = (0.95, 0.99)
 METHODS = ("equal", "inv_vol", "hrp", "current")

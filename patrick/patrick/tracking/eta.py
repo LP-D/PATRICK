@@ -175,7 +175,7 @@ class History:
     buckets: dict[str, _Bucket]
 
     def estimate(self, cfg: dict) -> Estimate | None:
-        for basis, key in zip(("exact", "near", "family"), signatures(cfg)):
+        for basis, key in zip(("exact", "near", "family"), signatures(cfg), strict=False):
             bucket = self.buckets.get(key)
             if bucket and bucket.totals:
                 # Famille seule : des runs aux étapes différentes (avec ou sans réglage Optuna...) -- seule la durée totale a un sens.

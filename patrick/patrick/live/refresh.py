@@ -301,7 +301,7 @@ def run_daily_predictions(candidates: list[PredictCandidate], predict_live_fn=No
                 summary.aborted = (f"Disque plein pendant la prédiction de {candidate.target} (horizon {candidate.horizon}) : {exc}. Les {remaining} "
                                    f"prédiction(s) suivante(s) échoueraient de même : arrêt. Libère de la place sur {_root_hint()} "
                                    "(`patrick storage evict --feature-cache-gb 100`, anciennes sauvegardes) puis relance.")
-                logger.error(summary.aborted)                       # un seul message, pas une traceback par cible
+                logger.error(summary.aborted)  # un seul message, pas une traceback par cible
             else:
                 logger.exception("FAIL  target=%s horizon=%s run_id=%s", candidate.target,
                                  candidate.horizon, candidate.run_id)

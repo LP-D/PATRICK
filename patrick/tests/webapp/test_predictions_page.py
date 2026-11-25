@@ -24,7 +24,7 @@ def _seed_db(tmp_path, monkeypatch) -> None:
     db.add_fold_metrics(conn, trial_id, 1, "test", {"F1_dir": 0.6})
     db.add_predictions(conn, trial_id, fold_index=1, split="test",
                         ts=["2024-01-01", "2024-01-02"], y_true=[3, 0], y_pred=[3, 0], y_proba=[0.7, 0.7])
-    db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": 2.1, "p_value": 0.03}, sample="holdout")
+    db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": -2.1, "p_value": 0.03}, sample="holdout")
     db.finish_run(conn, "run1", status="done", n_trials=1)
     conn.close()
 
@@ -44,9 +44,9 @@ def test_predictions_page_shows_significant_prediction(tmp_path, monkeypatch):
     assert resp.status_code == 200
     assert "^VIX" in resp.text
     assert "5j" in resp.text
-    # UP (classe 3, cf. _CLASS_DIRECTION) + p=0.0300 < 0.05 -> badge "ok".
+    # UP (classe 3, cf. _CLASS_DIRECTION) + p=0.0150 < 0.05 -> badge "ok".
     assert "Hausse forte" in resp.text  # classe 3 = UP + FORT
-    assert "0.0300" in resp.text
+    assert "0.0150" in resp.text
 
 
 def test_predictions_page_shows_explicit_empty_state_for_pairs_without_data(tmp_path, monkeypatch):
@@ -117,12 +117,12 @@ def test_predictions_page_dm_alpha_query_param_changes_significance_badge(tmp_pa
     resp_default = client.get("/predictions")
     assert resp_default.status_code == 200
     # p=0.03 < default alpha (0.05) -> "ok" badge.
-    assert 'status-ok">p=0.0300' in resp_default.text
+    assert 'status-ok">p=0.0150' in resp_default.text
 
     resp_strict = client.get("/predictions", params={"dm_alpha": "0.01"})
     assert resp_strict.status_code == 200
     # Same p-value, stricter alpha (0.01) -> no longer significant -> "warning".
-    assert 'status-warning">p=0.0300' in resp_strict.text
+    assert 'status-warning">p=0.0150' in resp_strict.text
     assert "0,01" in resp_strict.text  # subtitle reflects the actual threshold used
 
 
@@ -267,3 +267,17 @@ def test_the_reliability_api_refuses_too_few_points_and_unknown_targets(tmp_path
     assert few["bins"] == [] and "Pas assez" in few["none"]                              # 2 lignes de test : rien à tracer
     assert client.get("/api/predictions/reliability", params={"target": "NOPE", "horizon": 5}).status_code == 404
     assert client.get("/api/predictions/reliability", params={"target": "^VIX", "horizon": 0}).status_code == 404
+
+
+def test_a_model_worse_than_its_baseline_never_gets_the_significant_badge(tmp_path, monkeypatch):
+    """CO2/CO3 (25/11) : la p bilatérale 0,03 d'un modèle MOINS BON (dm_stat > 0) s'affichait « ok » (significatif)."""
+    _seed_db(tmp_path, monkeypatch)
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    conn.execute("UPDATE dm_result SET dm_stat = 2.1 WHERE run_id = 'run1'")
+    conn.commit()
+    conn.close()
+    client = TestClient(app)
+    text = client.get("/predictions").text
+    assert 'status-warning">p=0.9850' in text and 'status-ok">p=' not in text
+    detail = client.get("/runs/run1/detail").text
+    assert "non significatif" in detail and "moins bon que la référence" in detail

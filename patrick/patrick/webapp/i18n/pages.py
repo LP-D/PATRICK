@@ -796,6 +796,9 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
     "home_no_runs": _s("Aucun run pour l'instant.", "No run yet."),
     "home_full_history": _s("Historique complet", "Full history"),
     "lazy_retry": _s("Réessayer", "Retry"),
+    "lazy_error": _s("Ce bloc n'a pas pu être chargé.", "This block could not be loaded."),
+    "lazy_stale": _s("Le serveur est plus ancien que cette page : relancez « patrick serve ».", "The server is older than this page: restart “patrick serve”."),
+    "lazy_timeout": _s("Le serveur ne répond pas (base occupée ?).", "The server is not answering (database busy?)."),
     "m_section_title": _s("Métriques par fold", "Metrics per fold"),
     "m_section_intro": _s(
         "Le panneau d'abord : AUC de direction, Brier, MCC, bonne direction ; les autres mesures ensuite. Chaque ligne est un fold "

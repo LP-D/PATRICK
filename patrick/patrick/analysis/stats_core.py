@@ -13,6 +13,8 @@ import math
 import numpy as np
 from scipy import stats as sps
 
+from patrick.core.perf import downside_deviation
+
 UP_FROM = 2
 N_CLASSES = 4
 CLASS_KEYS = ("down_strong", "down_weak", "up_weak", "up_strong")
@@ -268,8 +270,7 @@ def sortino(returns, periods: int = 252) -> float | None:
     r = r[np.isfinite(r)]
     if len(r) < 2:
         return None
-    down = np.minimum(r, 0.0)
-    dd = math.sqrt(float(np.mean(down ** 2)))
+    dd = downside_deviation(r)                        # référence commune (core/perf, AM2)
     return float(r.mean() / dd * math.sqrt(periods)) if dd > 1e-12 else None
 
 

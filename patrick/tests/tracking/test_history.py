@@ -61,7 +61,7 @@ def test_list_runs_reports_best_trial_f1_and_dm_p_value(tmp_path):
 
     runs = trackhistory.list_runs(conn)
     assert runs[0]["best_f1_dir"] == 0.60
-    assert runs[0]["dm_p_value"] == 0.03
+    assert runs[0]["dm_p_value"] == pytest.approx(0.015)          # p unilatérale « le modèle fait mieux » (25/11)
     conn.close()
 
 
@@ -100,7 +100,7 @@ def test_run_detail_walkforward_structure(tmp_path):
     assert len(detail["trials"]) == 1
     assert detail["best_trial"]["trial_id"] == trial_id
     assert detail["holdout_f1_dir"] == 0.55
-    assert detail["dm_result"]["p_value"] == 0.03
+    assert detail["dm_result"]["p_value"] == pytest.approx(0.015) and detail["dm_result"]["p_two_sided"] == 0.03
     assert detail["target_fdr"] is not None
     assert detail["target_fdr"]["p_value"] == pytest.approx(0.015)     # p unilatéral (corrigé le 2026-10-07) : p bilatéral / 2 quand dm_stat < 0
     conn.close()
@@ -319,9 +319,9 @@ def test_direction_metrics_by_target_and_horizon_partitions_by_horizon(tmp_path)
     out = trackhistory.direction_metrics_by_target_and_horizon(conn, ["^VIX"], [5, 10])
     assert set(out.keys()) == {("^VIX", 5), ("^VIX", 10)}
     assert out[("^VIX", 5)]["run_id"] == "run_h5"
-    assert out[("^VIX", 5)]["dm_result"]["p_value"] == 0.03
+    assert out[("^VIX", 5)]["dm_result"]["p_value"] == pytest.approx(0.015)
     assert out[("^VIX", 10)]["run_id"] == "run_h10"
-    assert out[("^VIX", 10)]["dm_result"]["p_value"] == 0.42
+    assert out[("^VIX", 10)]["dm_result"]["p_value"] == pytest.approx(0.79)          # dm_stat > 0 : 1 - 0,42 / 2
     conn.close()
 
 

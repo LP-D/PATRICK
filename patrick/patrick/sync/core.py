@@ -1061,7 +1061,7 @@ def _save_champion_snapshot(db_path: str) -> str | None:
     try:
         cur = conn.execute("SELECT * FROM champion")
         cols = [d[0] for d in cur.description]
-        rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+        rows = [dict(zip(cols, r, strict=False)) for r in cur.fetchall()]
     except sqlite3.OperationalError:
         return None
     finally:

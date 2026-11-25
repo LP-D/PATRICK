@@ -67,7 +67,7 @@ def print_result(res: dict) -> None:
             typer.echo(f"\n## {b['title']}")
             typer.echo("| " + " | ".join(b["columns"]) + " |")
             for row in b["rows"]:
-                typer.echo("| " + " | ".join(_plain(v, k) for v, k in zip(row, b["kinds"])) + " |")
+                typer.echo("| " + " | ".join(_plain(v, k) for v, k in zip(row, b["kinds"], strict=False)) + " |")
             if b.get("note"):
                 typer.echo(f"({b['note']})")
         elif b["type"] == "kv":

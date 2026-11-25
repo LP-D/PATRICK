@@ -57,7 +57,7 @@ def j_season_order(ctx: Ctx, p: dict) -> dict:
             continue
         g = g.sort_values("day0")
         rank = (np.arange(len(g)) + 0.5) / len(g)
-        for r, (_, row) in zip(rank, g.iterrows()):
+        for r, (_, row) in zip(rank, g.iterrows(), strict=True):
             recs.append({"pos": "premier tiers" if r < 1 / 3 else "dernier tiers" if r > 2 / 3 else "milieu", "z_abs": row["z_abs"], "car": row["car"]})
     d = pd.DataFrame(recs)
     if len(d) < 30:

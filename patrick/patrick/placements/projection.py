@@ -125,7 +125,7 @@ def project(panel: pd.DataFrame, w: pd.Series, euro_keys: list[str], env: dict, 
     W = sim["W"]
     base = sim["invested"] + sim["abond"]
     gains = W - base
-    taxes = np.array([envelopes.exit_tax(g, sim["invested"], years, env, t, couple)["total"] for g, t in zip(gains, sim["taxed"])])
+    taxes = np.array([envelopes.exit_tax(g, sim["invested"], years, env, t, couple)["total"] for g, t in zip(gains, sim["taxed"], strict=True)])
     net = W - taxes
     goal = contrib.get("goal") or 0.0
     # Éventail MENSUEL (un point par mois, plus précis que la fin de chaque année) ; `fan_step` le dit aux lecteurs.

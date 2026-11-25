@@ -95,7 +95,8 @@ def test_top_level_pages_have_a_two_level_trail(client):
 # ---------------------------------------------------------------- tableaux
 def test_dates_in_data_tables_never_wrap(client):
     html = client.get("/targets/%5EVIX").text
-    cells = re.findall(r'<td class="nowrap">(\d{4}-\d{2}-\d{2}[ 0-9:]*)</td>', html)
+    # date brute, ou date relative (<time class="rel-time">, CO30 du 25/11) dont la date exacte reste dans la balise
+    cells = re.findall(r'<td class="nowrap">(?:<time class="rel-time"[^>]*>)?(\d{4}-\d{2}-\d{2}[ 0-9:]*)(?:</time>)?</td>', html)
     assert cells, "la date de lancement d'un run doit être protégée contre le retour à la ligne"
 
 

@@ -9,8 +9,9 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from patrick.core.perf import TRADING_DAYS
+
 FREQ = 12            # mois par an
-TRADING_DAYS = 252
 MAX_GAP_DAYS = 5     # un rendement quotidien est « quotidien » si les deux VL sont distantes de 5 jours calendaires au plus
 
 

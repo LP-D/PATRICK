@@ -1,0 +1,151 @@
+# Suivi des 120 propositions du 2026-11-25
+
+Deuxième liste demandée par Léon le 25/11 (30 améliorations « AM », 30 corrections « CO », 30 fonctionnalités « FO », 30 idées visuelles
+« VI »), sans doublon avec celle du 24/11 (`docs/suivi-propositions-2026-11-24.md`), puis « fais tout d'un coup ». Mise en œuvre par lots,
+une branche et une PR par lot, CI verte avant fusion. Ce fichier est la source de vérité de l'avancement.
+
+Statuts : **fait** (avec le lot) · **déjà fait** · **rien à changer** (vérifié : le constat ne tenait pas) · **à faire** · **à toi** (geste sur
+le PC de Léon ou calcul long du worker) · **décision** (change des résultats historiques ou irréversible : à trancher par Léon).
+
+Règles tenues dans tous les lots : aucun fichier de `features/pool_cache._FEATURE_SOURCES` n'est modifié (empreinte du cache de variables,
+plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; aucune maintenance de la vraie base pendant qu'un worker tourne.
+
+## Améliorations (AM)
+
+| # | Proposition | Statut |
+|---|---|---|
+| AM1 | Journaux au lieu de `print()` | à faire (lot 2) |
+| AM2 | Un seul module de métriques de performance | fait (lot 1 : `core/perf.py` : 252/365 jours, écart à la baisse ; simulateur, laboratoire, placements, risque et `stats_core` s'y rattachent) |
+| AM3 | Préchauffage au démarrage de serve | à faire (lot 4) |
+| AM4 | Cache des blocs lourds par version de base | à faire (lot 4) |
+| AM5 | Table `prediction` dans une base séparée | à faire (lot 4) |
+| AM6 | Compression zstd | à faire (lot 4) |
+| AM7 | Éviction du cache de variables selon le coût | à faire (lot 4) |
+| AM8 | Worker en tâche planifiée Windows | à faire (lot 5) |
+| AM9 | File triée par le conseiller de ré-entraînement | à faire (lot 5) |
+| AM10 | Bande de non-transaction sur les fonds | à faire (lot 7) |
+| AM11 | Spreads calibrés sur les vrais bid/ask | à faire (lot 7) |
+| AM12 | Intervalles de confiance sur AUC et F1 | à faire (lot 6) |
+| AM13 | Recherche Ctrl K élargie | à faire (lot 9) |
+| AM14 | Cliquet pyright sur les modules d'argent | à faire (lot 2) |
+| AM15 | Liste blanche testée des requêtes SQL assemblées | à faire (lot 2) |
+| AM16 | Tests de propriété sur la fiscalité et les frais | à faire (lot 3) |
+| AM17 | Non-régression visuelle en CI | à faire (lot 3) |
+| AM18 | Audit d'accessibilité automatique | à faire (lot 3) |
+| AM19 | Budget de temps par page en CI | à faire (lot 3) |
+| AM20 | CI plus rapide avec uv | à faire (lot 3) |
+| AM21 | Dependabot sur les versions figées | à faire (lot 3) |
+| AM22 | Fusionner `feat/sync-en-clair` (ADR 0020) | à faire (lot 5) |
+| AM23 | Rotation des journaux | à faire (lot 5) |
+| AM24 | Couverture anglaise mesurée | à faire (lot 9) |
+| AM25 | Erreurs de formulaire sur le champ concerné | à faire (lot 9) |
+| AM26 | Phases de nuit indépendantes en parallèle | à faire (lot 5) |
+| AM27 | Route `/healthz` | à faire (lot 5) |
+| AM28 | graphify à jour automatiquement | à faire (lot 3) |
+| AM29 | Index des ADR généré et vérifié en CI | à faire (lot 3) |
+| AM30 | Durée de chaque étape d'un run | à faire (lot 5 ; `run_phase_timing` existe déjà, migration 0016) |
+
+## Corrections (CO)
+
+| # | Proposition | Statut |
+|---|---|---|
+| CO1 | Nom de run inséré sans échappement | rien à changer : `tracking/history._run_name` échappe déjà le nom à la source (constat du 25/11 erroné) |
+| CO2 | « Significatif » en vert pour un modèle pire que la référence (page d'un run) | fait (lot 1 : `run_queries.dm_reading`, p unilatérale « le modèle fait mieux » partout où une page lit `dm_result` ; mention « moins bon que la référence ») |
+| CO3 | Même lecture sur /predictions et la fiche d'un actif | fait (lot 1 : même lecture ; pastille « moins bon ») |
+| CO4 | Sortino faux dans le simulateur | fait (lot 1 : écart à la baisse sur toutes les séances) |
+| CO5 | Annualisation sur 252 jours des séries 7 j/7 | fait (lot 1 : 365 jours quand plus de 20 % des dates tombent un week-end ; les fonds passaient déjà par les jours ouvrés) |
+| CO6 | Comparaison journal / table faite sur une ligne au hasard | fait (lot 1 : première prédiction du jour, intervalle de dates indexable) |
+| CO7 | Total des divergences plafonné à 30 | fait (lot 1) |
+| CO8 | Fuseau horaire figé au démarrage | fait (lot 1 : heure d'été appliquée date par date) |
+| CO9 | Configuration YAML lue dans l'encodage Windows | fait (lot 1 : UTF-8, repli cp1252 ; 4 autres `open()` en UTF-8) |
+| CO10 | Bloc en 404 : « Réessayer » inutile | fait (lot 1 : « serveur à relancer » ; le message d'erreur était en fait le libellé de chargement) |
+| CO11 | Chargement différé sans délai maximal | fait (lot 1 : 90 s puis message et Réessayer) |
+| CO12 | Interrogation toutes les 10 s sans fin, même onglet caché | fait (lot 1 : en pause onglet caché, abandon après 10 min) |
+| CO13 | Accès disque bloquant dans une route asynchrone | fait (lot 1) |
+| CO14 | « Tout relancer » sans confirmation | fait (lot 1 : confirmation, bouton secondaire) |
+| CO15 | Nombre de runs ayant lu le holdout ignoré | fait (lot 1 : colonne « Lectures » des garde-fous) |
+| CO16 | 56 `zip()` sans `strict=` | fait (lot 1 : `strict=True` pour l'alignement de données, `strict=False` explicite pour les lignes de base et l'affichage) |
+| CO17 | Causes d'erreur perdues | fait (lot 1 : `from None` sur les sorties de la CLI ; `logger.exception` pour l'échec de sauvegarde ; l'autre message est sans trace voulue) |
+| CO18 | 25 variables de boucle réaffectées | à faire (lot 2) |
+| CO19 | Nettoyage (variables inutilisées, `noqa` obsolètes) | à faire (lot 2) |
+| CO20 | Option fantôme `enable_fundamentals_features` | rien à changer : `features/equity_fundamentals.py` fait partie de l'empreinte du cache de variables et retirer le champ changerait l'empreinte des runs |
+| CO21 | Copies de travail orphelines | fait (25/11 : `PATRICK-wt-lot9` et `PATRICK-wt-topbar` supprimées, branches fusionnées effacées) |
+| CO22 | 9 tests sautés ou en échec attendu | à faire (lot 3) |
+| CO23 | Synchronisation en échec la nuit du 23/11 | à faire (lot 5) |
+| CO24 | Protection automatique de l'aperçu | à faire (lot 5) |
+| CO25 | Décisions des banques centrales lues dans les titres | à faire (lot 8) |
+| CO26 | Jours de changement d'échéance des contrats à terme | à faire (lot 6) |
+| CO27 | Erreurs pyright « valeur peut-être absente » | à faire (lot 2) |
+| CO28 | Lecture DM de la sélection des fonds | déjà fait (`fund/selection._dm_evidence` lit la p unilatérale ; `test_a_model_significantly_worse_than_its_baseline_is_not_dm_evidence`) |
+| CO29 | Verdict RL sans correction du nombre d'essais | fait (lot 1 : seuil de Šidák sur `stats.n_trials`) |
+| CO30 | Dates brutes sur la fiche d'un actif | fait (lot 1 : dates relatives, date exacte au survol) |
+
+## Fonctionnalités (FO)
+
+| # | Proposition | Statut |
+|---|---|---|
+| FO1 | Ensemble de confiance de modèles (MCS) | à faire (lot 6) |
+| FO2 | Test SPA / Reality Check | à faire (lot 6) |
+| FO3 | Prévision conforme | à faire (lot 6) |
+| FO4 | Combinaison des modèles (stacking) | à faire (lot 6) |
+| FO5 | Méta-étiquetage | à faire (lot 6) |
+| FO6 | Cible à barrières triples | à faire (lot 6) |
+| FO7 | Régime HMM comme variable | à faire (lot 6) |
+| FO8 | Score de robustesse d'un champion | à faire (lot 6) |
+| FO9 | Ré-entraînement automatique en cas de dérive | à faire (lot 5) |
+| FO10 | Rejouer la règle de sélection des fonds | à faire (lot 7) |
+| FO11 | Mode « et si » d'un fonds | à faire (lot 7) |
+| FO12 | Historique daté des réglages d'un fonds | à faire (lot 7) |
+| FO13 | Attribution de performance | à faire (lot 7) |
+| FO14 | Rapport mensuel en PDF par fonds | à faire (lot 7) |
+| FO15 | Stress tests historiques | à faire (lot 7) |
+| FO16 | Alertes de prix et de signal | à faire (lot 8) |
+| FO17 | Explication en clair de chaque prédiction | à faire (lot 8) |
+| FO18 | Comparaison de deux ré-entraînements | à faire (lot 8) |
+| FO19 | Comparaison fonds / vraies opérations | à faire (lot 8) |
+| FO20 | Import automatique des relevés | à faire (lot 8) |
+| FO21 | Objectifs patrimoniaux | à faire (lot 8) |
+| FO22 | Exposition aux devises du patrimoine | à faire (lot 8) |
+| FO23 | Dividendes et détachements | à faire (lot 8) |
+| FO24 | Volatilité implicite | à faire (lot 8) |
+| FO25 | Détecteur de paires cointégrées | à faire (lot 8) |
+| FO26 | Planification des lots par créneau | à faire (lot 9) |
+| FO27 | Assistant de lancement par objectif | à faire (lot 9) |
+| FO28 | Résumé du matin lisible sur téléphone | à faire (lot 9) |
+| FO29 | Mode démo sur base synthétique | à faire (lot 9) |
+| FO30 | Sauvegarde hors site chiffrée | à faire (lot 5) |
+
+## Visuel (VI)
+
+| # | Proposition | Statut |
+|---|---|---|
+| VI1 | Cône de prévision | à faire (lot 10) |
+| VI2 | Treemap d'un fonds | à faire (lot 10) |
+| VI3 | Cascade du rendement | à faire (lot 10) |
+| VI4 | Carte de corrélation des positions | à faire (lot 10) |
+| VI5 | Calendrier en carte de chaleur | à faire (lot 10) |
+| VI6 | Nuage risque / rendement des fonds | à faire (lot 10) |
+| VI7 | Courbe ROC avec curseur de seuil | à faire (lot 10) |
+| VI8 | Entonnoir de sélection des variables | à faire (lot 10) |
+| VI9 | Importance des familles de variables au fil des plis | à faire (lot 10) |
+| VI10 | Frise de la nuit | à faire (lot 10) |
+| VI11 | Jauge du disque et des caches | à faire (lot 10) |
+| VI12 | Étapes d'un run en frise | à faire (lot 10) |
+| VI13 | Mur de signaux | à faire (lot 10) |
+| VI14 | Carte du monde des marchés | à faire (lot 10) |
+| VI15 | Mini-courbes dans les tableaux | à faire (lot 10) |
+| VI16 | Pastille de fraîcheur sur chaque chiffre | à faire (lot 10) |
+| VI17 | Distribution des rendements d'un actif | à faire (lot 10) |
+| VI18 | Week-ends et fériés grisés | à faire (lot 10) |
+| VI19 | Échelle logarithmique | à faire (lot 10) |
+| VI20 | Zoom par sélection et mini-carte | à faire (lot 10) |
+| VI21 | Couleur fixe par famille de modèle | à faire (lot 10) |
+| VI22 | Icône de classe d'actifs | à faire (lot 10) |
+| VI23 | Comparateur de runs en « diff » | à faire (lot 10) |
+| VI24 | Notes libres datées sur les courbes | à faire (lot 10) |
+| VI25 | Plein écran d'un graphique | à faire (lot 10) |
+| VI26 | Synthèse personnalisable | à faire (lot 10) |
+| VI27 | Mode dense des tableaux | à faire (lot 10) |
+| VI28 | Thème haute lisibilité | à faire (lot 10) |
+| VI29 | Onglet du navigateur vivant | à faire (lot 10) |
+| VI30 | Écran de démarrage du lanceur | à faire (lot 10) |

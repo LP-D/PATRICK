@@ -4,6 +4,7 @@ validation + defaults, not for performance: a run loads its config only once.
 from __future__ import annotations
 
 import json
+import pathlib
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_serializer, model_validator
@@ -516,8 +517,14 @@ class RunConfig(BaseModel):
 
         from patrick.config import defaults as D
 
-        with open(path) as f:
-            raw = yaml.safe_load(f)
+        # CO9 : sans `encoding`, Windows lisait en cp1252 et un YAML UTF-8 accentué devenait « MÃ©thode » ; repli cp1252 pour un
+        # ancien fichier écrit par un éditeur Windows
+        data = pathlib.Path(path).read_bytes()
+        try:
+            text = data.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            text = data.decode("cp1252")
+        raw = yaml.safe_load(text)
         if isinstance(raw, dict):                   # un YAML neuf suit le défaut des nouveaux runs (ALFRED)
             raw.setdefault("universe", {}).setdefault("fred_point_in_time", D.DEFAULT_FRED_POINT_IN_TIME)
         return cls.model_validate(raw)

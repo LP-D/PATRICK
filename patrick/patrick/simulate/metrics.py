@@ -7,7 +7,14 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-TRADING_DAYS_PER_YEAR = 252
+from patrick.core.perf import TRADING_DAYS, downside_deviation, periods_per_year
+
+TRADING_DAYS_PER_YEAR = TRADING_DAYS      # nom historique, gardé pour les appelants
+
+
+def _periods(returns, periods: int | None) -> int:
+    """`periods` donné, sinon déduit de l'index (CO5 : 365 pour une série qui contient les week-ends, 252 sinon)."""
+    return int(periods) if periods else periods_per_year(getattr(returns, "index", None))
 
 
 def cagr(equity: pd.Series) -> float:
@@ -19,25 +26,31 @@ def cagr(equity: pd.Series) -> float:
     return float((equity.iloc[-1] / equity.iloc[0]) ** (1 / n_years) - 1)
 
 
-def annualized_vol(returns: pd.Series) -> float:
+def annualized_vol(returns: pd.Series, periods: int | None = None) -> float:
     if len(returns) < 2:
         return float("nan")
-    return float(returns.std(ddof=1) * np.sqrt(TRADING_DAYS_PER_YEAR))
+    return float(returns.std(ddof=1) * np.sqrt(_periods(returns, periods)))
 
 
-def sharpe_ratio(returns: pd.Series, risk_free: float = 0.0) -> float:
-    excess = returns - risk_free / TRADING_DAYS_PER_YEAR
+def sharpe_ratio(returns: pd.Series, risk_free: float = 0.0, periods: int | None = None) -> float:
+    n = _periods(returns, periods)
+    excess = returns - risk_free / n
     if len(excess) < 2 or excess.std(ddof=1) == 0:
         return float("nan")
-    return float(excess.mean() / excess.std(ddof=1) * np.sqrt(TRADING_DAYS_PER_YEAR))
+    return float(excess.mean() / excess.std(ddof=1) * np.sqrt(n))
 
 
-def sortino_ratio(returns: pd.Series, risk_free: float = 0.0) -> float:
-    excess = returns - risk_free / TRADING_DAYS_PER_YEAR
-    downside = excess[excess < 0]
-    if len(excess) < 2 or len(downside) < 2 or downside.std(ddof=1) == 0:
+def sortino_ratio(returns: pd.Series, risk_free: float = 0.0, periods: int | None = None) -> float:
+    """Rendement excédentaire moyen / écart à la baisse sur TOUTES les séances (CO4 : l'ancien calcul prenait l'écart-type des
+    seules séances négatives autour de leur propre moyenne, ce qui surévaluait le ratio ; voir `core/perf.downside_deviation`)."""
+    n = _periods(returns, periods)
+    excess = returns - risk_free / n
+    if len(excess) < 2 or int((excess < 0).sum()) < 1:
         return float("nan")
-    return float(excess.mean() / downside.std(ddof=1) * np.sqrt(TRADING_DAYS_PER_YEAR))
+    dd = downside_deviation(excess)
+    if not dd > 1e-12:
+        return float("nan")
+    return float(excess.mean() / dd * np.sqrt(n))
 
 
 def max_drawdown(equity: pd.Series) -> tuple[float, int]:

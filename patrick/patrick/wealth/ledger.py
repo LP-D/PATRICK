@@ -104,7 +104,7 @@ def get_account(conn: sqlite3.Connection, account_id: str) -> dict | None:
         return None
     keys = ("account_id", "name", "kind", "mode", "currency", "benchmark", "opened_on",
             "source_account_id", "archived", "created_at")
-    return dict(zip(keys, row))
+    return dict(zip(keys, row, strict=False))
 
 
 def list_accounts(conn: sqlite3.Connection, include_archived: bool = False) -> list[dict]:
@@ -214,7 +214,7 @@ def add_movement(conn: sqlite3.Connection, account_id: str, raw: dict) -> int:
 def get_movement(conn: sqlite3.Connection, movement_id: int) -> dict | None:
     row = conn.execute(f"SELECT {', '.join(_MOVEMENT_COLUMNS)} FROM wealth_movement WHERE movement_id = ?",
                        (movement_id,)).fetchone()
-    return dict(zip(_MOVEMENT_COLUMNS, row)) if row else None
+    return dict(zip(_MOVEMENT_COLUMNS, row, strict=False)) if row else None
 
 
 def list_movements(conn: sqlite3.Connection, account_id: str | None = None) -> list[dict]:
@@ -224,7 +224,7 @@ def list_movements(conn: sqlite3.Connection, account_id: str | None = None) -> l
         sql += " WHERE account_id = ?"
         params = (account_id,)
     sql += " ORDER BY ts, movement_id"
-    return [dict(zip(_MOVEMENT_COLUMNS, r)) for r in conn.execute(sql, params)]
+    return [dict(zip(_MOVEMENT_COLUMNS, r, strict=False)) for r in conn.execute(sql, params)]
 
 
 def delete_movement(conn: sqlite3.Connection, movement_id: int) -> None:

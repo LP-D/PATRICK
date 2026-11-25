@@ -103,7 +103,7 @@ def line_svg(block: dict, width: int = 640, height: int = 230) -> Markup:
 
 def bars_svg(block: dict, width: int = 640) -> Markup:
     labels, values, kind = block["labels"], block["values"], block.get("kind", "num2")
-    pairs = [(label, v) for label, v in zip(labels, values) if _num(v)][:24]
+    pairs = [(label, v) for label, v in zip(labels, values, strict=True) if _num(v)][:24]
     if not pairs:
         return Markup("")
     lo, hi = _axis([0.0] + [v for _, v in pairs], pad=0.05)

@@ -85,15 +85,19 @@
 
 {% if detail.is_cpcv %}
 {{ metric(t('rd_dm'), t('rd_not_computed'), t('rd_dm_cpcv'), "disabled") }}
+{% elif detail.dm_result and detail.dm_result.p_value is none %}
+{{ metric(t('rd_dm_vs', b=detail.dm_result.baseline), "—", t('rd_not_computed'), "disabled") }}
 {% elif detail.dm_result and detail.dm_result.sample == 'last_wf_fold' %}
 {{ metric(t('rd_dm_vs', b=detail.dm_result.baseline), "p = %.4f" | format(detail.dm_result.p_value),
-          t('rd_dm_selfold'),
+          t('rd_dm_selfold') ~ (t('rd_dm_worse') if detail.dm_result.worse else ''),
           "warning") }}
 {% elif detail.dm_result %}
+{# p UNILATÉRALE « le modèle fait mieux » (run_queries.dm_reading) : un modèle nettement moins bon n'est plus « significatif » #}
 {% set dm_alpha_str = ('%.2f' | format(dm_significance_alpha)) | replace('.', t('dec_sep')) %}
+{% set dm_ok = detail.dm_result.p_value < dm_significance_alpha %}
 {{ metric(t('rd_dm_vs', b=detail.dm_result.baseline), "p = %.4f" | format(detail.dm_result.p_value),
-          ((t('rd_signif', a=dm_alpha_str) if detail.dm_result.p_value < dm_significance_alpha else t('rd_not_signif', a=dm_alpha_str)) ~ t('rd_holdout_term_sfx') ~ ((", n = " ~ detail.dm_result.n_obs) if detail.dm_result.n_obs else "")),
-          "ok" if detail.dm_result.p_value < dm_significance_alpha else "warning") }}
+          ((t('rd_signif', a=dm_alpha_str) if dm_ok else t('rd_not_signif', a=dm_alpha_str)) ~ (t('rd_dm_worse') if detail.dm_result.worse else '') ~ t('rd_holdout_term_sfx') ~ ((", n = " ~ detail.dm_result.n_obs) if detail.dm_result.n_obs else "")),
+          "ok" if dm_ok else "warning") }}
 {% else %}
 {{ metric(t('rd_dm'), "—", t('rd_dm_none'), "disabled") }}
 {% endif %}

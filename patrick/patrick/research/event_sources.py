@@ -43,7 +43,7 @@ def yahoo_earnings(ticker: str, limit: int = 60) -> pd.DataFrame:
     out = pd.DataFrame({
         "published_at": df[date_col],
         "label": [f"{ts:%Y-%m-%d} ({s:+.1f} %)" if pd.notna(s) else f"{ts:%Y-%m-%d}"
-                  for ts, s in zip(df[date_col], surprise)],
+                  for ts, s in zip(df[date_col], surprise, strict=True)],
         "group": [_surprise_group(s) if pd.notna(s) else "n/d" for s in surprise],
     })
     return out.sort_values("published_at").reset_index(drop=True)

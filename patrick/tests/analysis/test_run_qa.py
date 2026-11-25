@@ -57,7 +57,8 @@ def test_context_is_compact_and_carries_the_figures(conn):
     _make_run(conn)
     ctx = run_qa.run_context(conn, "run1")
     assert ctx["run"]["target"] == "^VIX" and ctx["holdout"] == pytest.approx(0.51)
-    assert ctx["diebold_mariano"]["p_value"] == pytest.approx(0.69)
+    # p unilatérale « le modèle fait mieux » depuis le 25/11 (run_queries.dm_reading) ; la bilatérale reste lisible
+    assert ctx["diebold_mariano"]["p_value"] == pytest.approx(0.345) and ctx["diebold_mariano"]["p_two_sided"] == pytest.approx(0.69)
     assert ctx["evaluated_period"] == {"first": "2026-03-02", "last": pd.bdate_range("2026-03-02", periods=200)[-1].strftime("%Y-%m-%d")}
     assert ctx["config"]["universe_size"] == 2 and ctx["config"]["fred_series"] == 1
     assert len(json.dumps(ctx)) < 20000

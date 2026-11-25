@@ -18,7 +18,7 @@ NIGHT = """2026-11-21 23:00:04 ===== passage de nuit (fin : hibernate, inactivit
 2026-11-22 11:02:00    termine (code 1) en 40 000 s
 2026-11-22 11:02:01 == fin : mise en hibernate du PC
 """
-NOW = dt.datetime(2026, 11, 22, 12, 0, tzinfo=ns.LOCAL_TZ)
+NOW = dt.datetime(2026, 11, 22, 12, 0).astimezone()
 
 
 def _setup(tmp_path, funds=0, backup=0, stamp_day="2026-11-21", older=""):
@@ -54,6 +54,6 @@ def test_only_the_last_night_counts_and_an_old_one_is_missed(tmp_path):
 def test_an_unfinished_night_still_written_is_running_and_no_log_is_unknown(tmp_path):
     log = tmp_path / "nightly.log"
     log.write_text(NIGHT.split("2026-11-21 23:45:36    termine")[0], encoding="utf-8")
-    during = dt.datetime(2026, 11, 21, 23, 30, tzinfo=ns.LOCAL_TZ)
+    during = dt.datetime(2026, 11, 21, 23, 30).astimezone()
     assert ns.night_status(tmp_path, during)["status"] == "running"           # journal écrit à l'instant, pas de « fin »
     assert ns.night_status(tmp_path / "absent", NOW) == {"status": "unknown"}

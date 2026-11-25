@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import datetime as dt
 import io
 import sqlite3
 
@@ -16,6 +17,14 @@ LAST_N = 30
 DIVERGENCE_LIMIT = 30
 
 
+def _next_day(day: str) -> str:
+    """Borne haute (exclue) du jour `AAAA-MM-JJ` ; une valeur illisible garde le jour lui-même suivi du plus grand caractère imprimable."""
+    try:
+        return (dt.date.fromisoformat(str(day)[:10]) + dt.timedelta(days=1)).isoformat()
+    except ValueError:
+        return str(day) + "~"
+
+
 def _load(conn: sqlite3.Connection) -> list[tuple]:
     return conn.execute("SELECT journal_id, recorded_at, kind, origin, run_id, trial_id, target, horizon, signal_date, y_pred, p_up, y_true, model_hash, entry_hash, imported_from "
                         "FROM prediction_journal ORDER BY journal_id").fetchall()
@@ -25,7 +34,7 @@ def overview(conn: sqlite3.Connection) -> dict:
     rows = _load(conn)
     signals: dict[tuple, dict] = {}
     outcome: dict[tuple, float] = {}
-    for jid, rec, kind, origin, run_id, trial_id, target, horizon, day, y_pred, p_up, y_true, mh, _eh, imported in rows:
+    for _jid, rec, kind, origin, run_id, trial_id, target, horizon, day, y_pred, p_up, y_true, mh, _eh, imported in rows:
         key = (imported, trial_id, day)             # un trial_id importé désigne un essai de l'autre base : jamais le même que le local
         if kind == "signal":
             signals.setdefault(key, {"target": target, "horizon": int(horizon), "run_id": run_id, "y_pred": y_pred, "p_up": p_up, "origin": origin, "model_hash": mh, "day": day, "at": rec, "imported": imported})
@@ -50,19 +59,24 @@ def overview(conn: sqlite3.Connection) -> dict:
                       "models": len({s["model_hash"] for _, s, _y in lst if s["model_hash"]})})
     # écarts entre le premier signal journalisé et la table `prediction` (qui peut se réécrire)
     divergences = []
-    n_checked = 0
+    n_checked = n_div = 0
     for (imported, trial_id, day), s in signals.items():
         if imported is not None:
             continue                                  # la table `prediction` locale ne recoupe que les signaux de ce PC
-        row = conn.execute("SELECT y_pred, p_up FROM prediction WHERE trial_id = ? AND split = 'live' AND ts LIKE ? LIMIT 1", (trial_id, day + "%")).fetchone()
+        # CO6 : la PREMIÈRE prédiction réelle du jour (une relance peut en écrire une seconde ; sans ORDER BY, SQLite rendait
+        # l'une ou l'autre), sur un intervalle de dates plutôt qu'un LIKE qui empêche l'index
+        row = conn.execute("SELECT y_pred, p_up FROM prediction WHERE trial_id = ? AND split = 'live' AND ts >= ? AND ts < ? ORDER BY ts LIMIT 1",
+                           (trial_id, day, _next_day(day))).fetchone()
         if row is None:
             continue
         n_checked += 1
         same_pred = s["y_pred"] is None or row[0] is None or abs(float(row[0]) - float(s["y_pred"])) < 1e-9
         same_p = s["p_up"] is None or row[1] is None or abs(float(row[1]) - float(s["p_up"])) < 1e-6
-        if not (same_pred and same_p) and len(divergences) < DIVERGENCE_LIMIT:
+        if same_pred and same_p:
+            continue
+        n_div += 1                                    # CO7 : tout est compté, seule la liste montrée est bornée
+        if len(divergences) < DIVERGENCE_LIMIT:
             divergences.append({"target": s["target"], "horizon": s["horizon"], "day": day, "journal": {"y_pred": s["y_pred"], "p_up": s["p_up"]}, "table": {"y_pred": row[0], "p_up": row[1]}})
-    n_div = sum(1 for _ in divergences)
     stamps = [r[1] for r in rows]
     return sc.jsonable({
         "n_entries": len(rows), "n_signals": len(signals), "n_outcomes": len(outcome), "first_at": stamps[0] if stamps else None, "last_at": stamps[-1] if stamps else None,

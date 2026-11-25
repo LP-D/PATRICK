@@ -22,7 +22,8 @@ from pathlib import Path
 TAIL_BYTES = 2_000_000
 STALE_HOURS = 36
 RUNNING_GRACE_S = 3600
-LOCAL_TZ = dt.datetime.now().astimezone().tzinfo          # le journal est écrit en heure locale (Get-Date)
+# Le journal est écrit en heure locale (Get-Date). CO8 : le décalage n'est plus figé à l'import (un serveur lancé avant le changement
+# d'heure lisait la nuit avec une heure d'écart) ; `astimezone()` applique les règles d'heure d'été de CHAQUE date.
 _LINE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (.*)$")
 _START = "===== passage de nuit"
 _STEP = re.compile(r"^== (.+?) : python ")
@@ -68,7 +69,7 @@ def _clean(raw: str) -> str:
 
 
 def _local(text: str) -> dt.datetime:
-    return dt.datetime.strptime(text, "%Y-%m-%d %H:%M:%S").replace(tzinfo=LOCAL_TZ)
+    return dt.datetime.strptime(text, "%Y-%m-%d %H:%M:%S").astimezone()
 
 
 def parse_last_night(lines: list[str]) -> dict | None:
@@ -104,7 +105,7 @@ def parse_last_night(lines: list[str]) -> dict | None:
 def night_status(runs_dir: Path | None = None, now: dt.datetime | None = None) -> dict:
     """Statut de la dernière nuit (voir l'en-tête), avec ses étapes en échec. Heures locales, comme le journal."""
     runs_dir = runs_dir or repo_runs_dir()
-    now = now or dt.datetime.now(LOCAL_TZ)
+    now = now or dt.datetime.now().astimezone()
     log = runs_dir / "nightly.log"
     if not log.is_file():
         return {"status": "unknown"}

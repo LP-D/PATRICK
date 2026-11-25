@@ -265,7 +265,7 @@ def _build_exposure(signal_dates: pd.DatetimeIndex, target_pos: np.ndarray,
     if params.overlap_mode == "tranches":
         accum = np.zeros(n)
         count = np.zeros(n)
-        for entry_idx, pos in zip(entry_idxs, target_pos):
+        for entry_idx, pos in zip(entry_idxs, target_pos, strict=True):
             if entry_idx is None:
                 continue
             end_idx = min(entry_idx + horizon, n)
@@ -274,7 +274,7 @@ def _build_exposure(signal_dates: pd.DatetimeIndex, target_pos: np.ndarray,
         exposure = np.divide(accum, count, out=np.zeros(n), where=count > 0)
     elif params.overlap_mode == "renewed":
         sparse = pd.Series(np.nan, index=daily_index)
-        for entry_idx, pos in zip(entry_idxs, target_pos):
+        for entry_idx, pos in zip(entry_idxs, target_pos, strict=True):
             if entry_idx is not None:
                 sparse.iloc[entry_idx] = pos
         exposure = sparse.ffill().fillna(0.0).values

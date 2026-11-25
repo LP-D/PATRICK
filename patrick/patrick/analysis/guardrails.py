@@ -73,11 +73,14 @@ def summary(conn: sqlite3.Connection) -> dict:
               "JOIN fold_metric f ON f.trial_id = t.trial_id AND f.split = 'holdout' AND f.metric = 'F1_dir' WHERE r.status = 'done' GROUP BY r.target, r.horizon")}
     duels = {(t, h): int(n) for t, h, n in _rows(conn, "SELECT target, horizon, COUNT(*) FROM model_archive WHERE duel_json IS NOT NULL GROUP BY target, horizon")}
     reads = {}
-    for t, h, purpose, n, n_runs in _rows(conn, "SELECT target, horizon, purpose, COUNT(*), COUNT(DISTINCT run_id) FROM holdout_access GROUP BY target, horizon, purpose"):
-        d = reads.setdefault((t, h), {"total": 0, "selecting": 0, "by_purpose": {}})
+    for t, h, purpose, n in _rows(conn, "SELECT target, horizon, purpose, COUNT(*) FROM holdout_access GROUP BY target, horizon, purpose"):
+        d = reads.setdefault((t, h), {"total": 0, "selecting": 0, "by_purpose": {}, "runs": 0})
         d["total"] += int(n)
         d["selecting"] += int(n) if purpose in SELECTING_PURPOSES else 0
         d["by_purpose"][purpose] = int(n)
+    # CO15 : nombre de runs DISTINCTS qui ont lu le holdout de la paire (la somme par usage compterait deux fois un même run)
+    for t, h, n_runs_read in _rows(conn, "SELECT target, horizon, COUNT(DISTINCT run_id) FROM holdout_access GROUP BY target, horizon"):
+        reads.setdefault((t, h), {"total": 0, "selecting": 0, "by_purpose": {}, "runs": 0})["runs"] = int(n_runs_read)
     pairs = sorted(set(trials) | set(runs) | set(best))
     rows = []
     for key in pairs:
@@ -87,14 +90,14 @@ def summary(conn: sqlite3.Connection) -> dict:
         n_rows = int(nr) if nr else DEFAULT_HOLDOUT_ROWS
         defl = deflated(acc, n_rows, h or 1, n_trials)
         n_runs, n_cfg, first = runs.get(key, (0, 0, None))
-        rd = reads.get(key, {"total": 0, "selecting": 0, "by_purpose": {}})
+        rd = reads.get(key, {"total": 0, "selecting": 0, "by_purpose": {}, "runs": 0})
         verdict = None
         if defl["p_deflated"] is not None:
             # un score au-delà de TOO_GOOD survit à toute déflation et pourtant trahit d'abord une fuite d'information : il se lit à part
             verdict = "suspect" if acc is not None and acc >= TOO_GOOD else ("beyond_noise" if defl["p_deflated"] < 0.10 else "within_noise")
         rows.append({"target": t, "horizon": h, "runs": n_runs, "configs": n_cfg, "trials": n_trials, "best_acc": acc, "n_rows": n_rows,
                      "n_rows_known": bool(nr), **defl, "verdict": verdict, "first_run": first, "reads_recorded": rd["total"],
-                     "reads_selecting": rd["selecting"], "reads_inferred": ho_runs.get(key, 0), "duels": duels.get(key, 0)})
+                     "reads_selecting": rd["selecting"], "reads_runs": rd["runs"], "reads_inferred": ho_runs.get(key, 0), "duels": duels.get(key, 0)})
     log = [dict(zip(("accessed_at", "target", "horizon", "purpose", "run_id", "holdout_start", "holdout_end", "n_rows", "detail"), r, strict=True))
            for r in _rows(conn, "SELECT accessed_at, target, horizon, purpose, run_id, holdout_start, holdout_end, n_rows, detail FROM holdout_access "
                                 "ORDER BY access_id DESC LIMIT ?", (LOG_LIMIT,))]

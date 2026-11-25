@@ -540,7 +540,7 @@ def rule_summaries(conn: sqlite3.Connection, strategy_id: str) -> list[dict]:
         model = conn.execute(
             "SELECT run.target, run.horizon, trial.algo FROM trial JOIN run ON run.run_id = trial.run_id "
             "WHERE trial.trial_id = ?", (rule["config"]["trial_id"],)).fetchone()
-        described = dict(zip(("target", "horizon", "algo"), model)) if model else None
+        described = dict(zip(("target", "horizon", "algo"), model, strict=False)) if model else None
         if described:
             _, described["kind"], described["benchmark"] = split_run_label(described["target"])
         out.append({**rule, "n_orders": sum(1 for n in notes if n.startswith(prefix)), "model": described})

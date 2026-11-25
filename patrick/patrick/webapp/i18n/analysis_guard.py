@@ -48,7 +48,7 @@ GUARD_STRINGS: dict[str, dict[str, str]] = {
     "ag_c_margin": _s("Marge", "Margin"),
     "ag_c_p": _s("p brute", "Raw p"),
     "ag_c_pdef": _s("p déflatée", "Deflated p"),
-    "ag_c_reads": _s("Lectures : enreg. / déduites / duels", "Reads: recorded / inferred / duels"),
+    "ag_c_reads": _s("Lectures : enreg. (runs) / déduites / duels", "Reads: recorded (runs) / inferred / duels"),
     "ag_c_verdict": _s("Verdict", "Verdict"),
     "ag_rows": _s("{n} couples affichés sur {total}.", "{n} pairs shown out of {total}."),
     "ag_t_hint": _s("Marge = meilleure exactitude − meilleur attendu au hasard parmi les essais enregistrés. L'effectif holdout est divisé par l'horizon (fenêtres qui se chevauchent) ; 280 jours si inconnu.", "Margin = best accuracy − best expected on chance among the recorded trials. The holdout count is divided by the horizon (overlapping windows); 280 days if unknown."),

@@ -162,7 +162,7 @@ def importance_ridge(df: pd.DataFrame, feats: pd.DataFrame, columns: list[str] |
     ok_ = y.notna().to_numpy()
     X, _ = _impute(feats[cols][ok_], feats[cols][ok_].iloc[:1])
     _, m = _ridge(X, y[ok_].to_numpy(), X[:1])
-    return sorted(zip(cols, m.coef_.tolist()), key=lambda kv: -abs(kv[1]))
+    return sorted(zip(cols, m.coef_.tolist(), strict=True), key=lambda kv: -abs(kv[1]))
 
 
 def evaluate_direction(df: pd.DataFrame, feats: pd.DataFrame, n_folds: int = 5, purge_days: int = 10) -> dict:
