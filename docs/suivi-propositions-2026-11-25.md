@@ -25,7 +25,7 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 | AM9 | File triée par le conseiller de ré-entraînement | à faire (lot 5) |
 | AM10 | Bande de non-transaction sur les fonds | à faire (lot 7) |
 | AM11 | Spreads calibrés sur les vrais bid/ask | à faire (lot 7) |
-| AM12 | Intervalles de confiance sur AUC et F1 | à faire (lot 6) |
+| AM12 | Intervalles de confiance sur AUC et F1 | déjà fait : AUC avec intervalle de bootstrap par blocs dans l'analyse d'un run (sections « prédiction » et « robustesse », `analysis/sec_predict.py`, `sec_robust.py`) |
 | AM13 | Recherche Ctrl K élargie | à faire (lot 9) |
 | AM14 | Cliquet pyright sur les modules d'argent | fait (lots 2-3 : `fund/selection.py`, `core/perf.py`, `tracking/run_queries.py` ajoutés au cliquet pyright ; le reste des modules d'argent compte 316 erreurs, surtout des annotations de pandas) |
 | AM15 | Liste blanche testée des requêtes SQL assemblées | fait (lots 2-3 : les constructeurs relus filtrent déjà leurs noms ; liste fermée ajoutée aux ordres limite ; `tests/repo/test_sql_builders.py` refuse tout nouveau constructeur non relu) |
@@ -74,7 +74,7 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 | CO23 | Synchronisation en échec la nuit du 23/11 | à faire (lot 5) |
 | CO24 | Protection automatique de l'aperçu | à faire (lot 5) |
 | CO25 | Décisions des banques centrales lues dans les titres | à faire (lot 8) |
-| CO26 | Jours de changement d'échéance des contrats à terme | à faire (lot 6) |
+| CO26 | Jours de changement d'échéance des contrats à terme | fait en partie (lot 6 : `patrick audit futures-rolls` repère les sauts au-delà de 5 écarts robustes près d'une échéance) ; retirer ces jours des étiquettes = décision (change tous les runs de contrats à terme) |
 | CO27 | Erreurs pyright « valeur peut-être absente » | fait en partie (lots 2-3 : accès à None gardés dans les ordres limite, le transfert de mouvements et la sélection des fonds ; reste du bruit d'annotations pandas) |
 | CO28 | Lecture DM de la sélection des fonds | déjà fait (`fund/selection._dm_evidence` lit la p unilatérale ; `test_a_model_significantly_worse_than_its_baseline_is_not_dm_evidence`) |
 | CO29 | Verdict RL sans correction du nombre d'essais | fait (lot 1 : seuil de Šidák sur `stats.n_trials`) |
@@ -84,14 +84,14 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 
 | # | Proposition | Statut |
 |---|---|---|
-| FO1 | Ensemble de confiance de modèles (MCS) | à faire (lot 6) |
-| FO2 | Test SPA / Reality Check | à faire (lot 6) |
-| FO3 | Prévision conforme | à faire (lot 6) |
-| FO4 | Combinaison des modèles (stacking) | à faire (lot 6) |
-| FO5 | Méta-étiquetage | à faire (lot 6) |
-| FO6 | Cible à barrières triples | à faire (lot 6) |
-| FO7 | Régime HMM comme variable | à faire (lot 6) |
-| FO8 | Score de robustesse d'un champion | à faire (lot 6) |
+| FO1 | Ensemble de confiance de modèles (MCS) | fait (lot 6 : `validation/model_set.py`, MCS de Hansen-Lunde-Nason sur le Brier au holdout de tous les runs de la paire ; section de la fiche d'un actif, champion dans l'ensemble ou non) |
+| FO2 | Test SPA / Reality Check | fait (lot 6 : SPA de Hansen contre le pile ou face, même section, p consistante) |
+| FO3 | Prévision conforme | déjà fait : section « Prévision conforme » de la page d'un run (couverture par découpage et adaptative, taux d'abstention) |
+| FO4 | Combinaison des modèles (stacking) | déjà fait : empilement disponible en option (`DEFAULT_STACKING_ENABLED`, ADR 0001), désactivé par défaut après mesure |
+| FO5 | Méta-étiquetage | déjà fait : `validation/meta_labeling.py`, sur la page d'un run |
+| FO6 | Cible à barrières triples | décision : le module `features/triple_barrier.py` existe ; en faire une cible change l'étiquette lue par une vingtaine de consommateurs (même blocage que la cible de volatilité, ADR 0011) |
+| FO7 | Régime HMM comme variable | déjà fait : variable `hmm_filtered_stress_prob` (régime filtré par HMM, sans regard vers le futur) dans `features/vol_models.py` |
+| FO8 | Score de robustesse d'un champion | fait (lot 6 : `validation/robustness.py`, note sur 100 en tête de la page d'un run, avec ce qui manque) |
 | FO9 | Ré-entraînement automatique en cas de dérive | à faire (lot 5) |
 | FO10 | Rejouer la règle de sélection des fonds | à faire (lot 7) |
 | FO11 | Mode « et si » d'un fonds | à faire (lot 7) |

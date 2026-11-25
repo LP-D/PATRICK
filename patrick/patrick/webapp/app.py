@@ -2826,7 +2826,7 @@ def _run_method_context(conn, run_id: str, detail: dict | None) -> dict:
     """Version de méthode et d'alignement d'un run (ADR 0007 et 0008), placebo de décalage, DM sur le Brier : ce qui dit si ses chiffres
     sont comparables à ceux d'un autre run. Un run d'avant les champs est de méthode 1 et de règle d'alignement 1."""
     out: dict = {"method": 1, "session_rule": 1, "placebo": None, "placebo_verdict": None, "dm_brier": None, "alignment_reason": None,
-                 "profile": None}
+                 "profile": None, "robustness": None}
     if detail is None:
         return out
     try:
@@ -2845,6 +2845,8 @@ def _run_method_context(conn, run_id: str, detail: dict | None) -> dict:
         out["placebo"] = placebo
         out["placebo_verdict"] = placebo_verdict(placebo["real"], placebo["lag1"])
     out["dm_brier"] = trackdb.get_dm_brier(conn, run_id)
+    from patrick.validation import robustness
+    out["robustness"] = robustness.score(detail, out)                  # FO8 : les preuves de la page rassemblées en une note
     return out
 
 

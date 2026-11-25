@@ -415,6 +415,30 @@ def audit_speed_cmd(
         typer.echo(report)
 
 
+@audit_app.command(name="futures-rolls")
+def audit_futures_rolls_cmd(
+    symbol: list[str] = typer.Option(None, "--symbol", help="Contrat continu (répétable ; défaut : tous les =F de l'univers)"),  # noqa: B008
+    k: float = typer.Option(5.0, "--k", help="Seuil en écarts robustes"),
+) -> None:
+    """Jours de changement d'échéance probables des contrats à terme continus (CO26) : sauts au-delà de k écarts près d'une échéance."""
+    from patrick.analysis import futures_rolls
+    from patrick.wealth import prices as wealth_prices
+    from patrick.webapp import forms
+
+    symbols = list(symbol or [s for s in forms.TARGET_SOURCE_BY_SYMBOL if s.endswith("=F")])
+    provider = wealth_prices.make_provider(allow_network=False)
+    for sym in symbols:
+        close = provider(sym)
+        if close is None:
+            typer.echo(f"{sym} : pas de cours en cache")
+            continue
+        out = futures_rolls.summary(sym, close, k=k)
+        share = f"{out['share'] * 100:.2f} %" if out["share"] is not None else "—"
+        typer.echo(f"{sym} : {out['n_suspect']} jour(s) suspect(s) sur {out['n_days']} ({share})")
+        for row in out["largest"][:3]:
+            typer.echo(f"    {str(row['date'])[:10]} : {row['return'] * 100:+.2f} % ({row['z']:+.1f} écarts), échéance {str(row['nearest_expiry'])[:10]}")
+
+
 @audit_app.command(name="signal")
 def audit_signal_cmd(
     shifts: int = typer.Option(1000, "--shifts", help="Décalages circulaires de l'étiquette par paire (précision de la p-value)"),

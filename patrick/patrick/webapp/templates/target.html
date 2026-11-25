@@ -71,6 +71,12 @@
     {{ lazy_block('/fragments/champion-history/' ~ (target | urlencode), 3, t('sb_loading'), t('lazy_retry')) }}
 </section>
 
+<section id="ensemble-modeles" class="card">
+    <h2>{{ t('ms_title') }}</h2>
+    <p class="hint">{{ t('ms_hint') }}</p>
+    {{ lazy_block('/fragments/model-set/' ~ (target | urlencode), 3, t('sb_loading'), t('lazy_retry')) }}
+</section>
+
 <section id="actualites" class="card">
     <h2>{{ t('as_news_h') }} <a class="hint" href="/news?symbol={{ target | urlencode }}">{{ t('as_news_all') }}</a></h2>
     {{ lazy_block('/fragments/news-feed?symbol=' ~ (target | urlencode), 4, t('sb_loading'), t('lazy_retry')) }}
