@@ -312,6 +312,8 @@
         setQueueOpen(queueToggle.getAttribute("aria-expanded") !== "true");
     });
     clearQueueBtn.addEventListener("click", function () { queueRequest("/api/queue", { method: "DELETE" }); });
+    var sortQueueBtn = $("sort-queue-btn");            // AM9 : paires sans champion puis champions les plus anciens d'abord
+    if (sortQueueBtn) sortQueueBtn.addEventListener("click", function () { queueRequest("/api/queue/sort-urgency", { method: "POST" }); });
 
     queueList.addEventListener("click", function (event) {
         var button = event.target.closest("button[data-job-action]");
