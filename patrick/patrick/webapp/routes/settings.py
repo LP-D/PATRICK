@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 import uuid
@@ -97,6 +98,35 @@ def register(app: FastAPI, templates, context) -> None:
     @app.get("/api/app/boot")
     def boot(request: Request):
         return {"boot_id": BOOT_ID}
+
+    @app.get("/healthz")
+    def healthz():
+        """État du serveur en quelques millisecondes (AM27 du 25/11) : version du code, schéma de la base, worker vivant.
+
+        `server_too_old` : la base a reçu des migrations plus récentes que le code qui tourne (serveur lancé avant une mise à jour,
+        cause des blocs « Chargement… » puis 404) ; `migrations_pending` : l'inverse. Lu par le lanceur et par la barre du haut."""
+        from patrick.tracking import db as trackdb
+        out: dict = {"ok": True, "boot_id": BOOT_ID, "code_schema": trackdb._latest_migration_version()}
+        try:
+            conn = trackdb.connect()
+            try:
+                out["db_schema"] = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+                hb = conn.execute("SELECT pid, updated_at FROM worker_heartbeat WHERE id = 1").fetchone()
+            finally:
+                conn.close()
+        except sqlite3.Error as exc:
+            return JSONResponse({**out, "ok": False, "error": f"base illisible : {exc}"}, status_code=503)
+        out["server_too_old"] = bool(out["db_schema"] and out["db_schema"] > out["code_schema"])
+        out["migrations_pending"] = bool(out["db_schema"] is not None and out["db_schema"] < out["code_schema"])
+        alive = False
+        if hb:
+            try:
+                import psutil
+                alive = bool(psutil.pid_exists(int(hb[0])))
+            except (ImportError, ValueError, TypeError):
+                alive = False
+        out["worker"] = {"pid": hb[0] if hb else None, "heartbeat": hb[1] if hb else None, "alive": alive}
+        return out
 
     @app.get("/api/app/overview")
     def overview(request: Request):

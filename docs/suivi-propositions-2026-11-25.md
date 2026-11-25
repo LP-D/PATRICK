@@ -18,11 +18,11 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 | AM2 | Un seul module de métriques de performance | fait (lot 1 : `core/perf.py` : 252/365 jours, écart à la baisse ; simulateur, laboratoire, placements, risque et `stats_core` s'y rattachent) |
 | AM3 | Préchauffage au démarrage de serve | déjà fait : `cached_views.warm_async()` calcule les vues lourdes (dont /fonds et l'import de scipy) 20 s après le démarrage du serveur |
 | AM4 | Cache des blocs lourds par version de base | déjà fait : `webapp/cached_views.py` garde chaque vue lourde et la recalcule en tâche de fond quand la base bouge (`memo.fingerprint`) |
-| AM5 | Table `prediction` dans une base séparée | à faire (lot 4) |
-| AM6 | Compression zstd | à faire (lot 4) |
-| AM7 | Éviction du cache de variables selon le coût | à faire (lot 4) |
-| AM8 | Worker en tâche planifiée Windows | à faire (lot 5) |
-| AM9 | File triée par le conseiller de ré-entraînement | à faire (lot 5) |
+| AM5 | Table `prediction` dans une base séparée | décision : une seconde base attachée exige un ATTACH sur chaque connexion, et en mode WAL une transaction qui touche les deux fichiers n'est plus atomique entre eux ; sauvegarde, partage et fusion devraient suivre deux fichiers. À trancher (l'archivage Parquet des prédictions du scan, ADR 0009, a déjà retiré l'essentiel du volume) |
+| AM6 | Compression zstd | fait en partie (lots 4-5 : copies hors site compressées en zstd sous Python 3.14, gzip sinon) ; décision pour `vol_model_cache` : un format zstd serait illisible par l'autre PC tant qu'il n'est pas à jour |
+| AM7 | Éviction du cache de variables selon le coût | fait (lots 4-5 : durée du calcul écrite à côté de chaque pool (`.cost`), l'éviction rajeunit un pool cher : 1 min de calcul = 4 h, plafond 40 h ; jamais un fichier lu depuis moins d'une heure) |
+| AM8 | Worker en tâche planifiée Windows | fait, installation à toi (lots 4-5 : `patrick worker --if-no-worker` et `scripts/schtasks_worker.ps1 -Install`, toutes les 15 min : relance un worker mort s'il y a des jobs, jamais un second) |
+| AM9 | File triée par le conseiller de ré-entraînement | fait (lots 4-5 : bouton « Trier par urgence » de la file : paires sans champion, puis champions les plus anciens ; ordre modifiable ensuite) |
 | AM10 | Bande de non-transaction sur les fonds | déjà fait : le pilote ne change une taille que si le budget a bougé de plus de 10 % (`autopilot.SIZING_TOLERANCE`) |
 | AM11 | Spreads calibrés sur les vrais bid/ask | fait en partie (lot 7 : `patrick fund spreads` mesure l'écart achat-vente affiché par Yahoo par classe et le compare aux médianes du modèle) ; remplacer les médianes = décision (change les frais et le P&L passé des fonds) |
 | AM12 | Intervalles de confiance sur AUC et F1 | déjà fait : AUC avec intervalle de bootstrap par blocs dans l'analyse d'un run (sections « prédiction » et « robustesse », `analysis/sec_predict.py`, `sec_robust.py`) |
@@ -36,14 +36,14 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 | AM20 | CI plus rapide avec uv | fait (lots 2-3 : suite rapide et vérification des types installées par uv ; les tâches à environnement figé gardent pip) |
 | AM21 | Dependabot sur les versions figées | déjà fait : `.github/dependabot.yml` (pip et actions, chaque semaine) ; le fichier figé se régénère par `constraints-regen.yml` (B2) |
 | AM22 | Fusionner `feat/sync-en-clair` (ADR 0020) | déjà fait : ADR 0020 fusionnée le 13/11 (PR 72) ; la branche distante restante est un reste |
-| AM23 | Rotation des journaux | à faire (lot 5) |
+| AM23 | Rotation des journaux | fait (lots 4-5 : la nuit compresse `nightly.log` au-delà de 300 Mo et garde 4 archives ; testé sur un faux journal) |
 | AM24 | Couverture anglaise mesurée | à faire (lot 9) |
 | AM25 | Erreurs de formulaire sur le champ concerné | à faire (lot 9) |
-| AM26 | Phases de nuit indépendantes en parallèle | à faire (lot 5) |
-| AM27 | Route `/healthz` | à faire (lot 5) |
+| AM26 | Phases de nuit indépendantes en parallèle | rien à changer : mesuré sur le journal réel, la nuit est dominée par les prédictions (étapes de 59 000 à 63 000 s) ; les autres étapes durent quelques minutes, les paralléliser ne gagnerait rien et chargerait les processeurs pendant les prédictions |
+| AM27 | Route `/healthz` | fait (lots 4-5 : `/healthz` : version du schéma de la base et du code, `server_too_old`, `migrations_pending`, worker vivant) |
 | AM28 | graphify à jour automatiquement | fait (lots 2-3 : crochet `.githooks/post-merge`, `graphify update .` en arrière-plan après un `git pull`) |
 | AM29 | Index des ADR généré et vérifié en CI | fait (lots 2-3 : `tests/repo/test_adr_index.py` : numéros uniques et continus, chaque ADR une fois dans l'index ; 8 statuts « à fusionner » périmés corrigés) |
-| AM30 | Durée de chaque étape d'un run | à faire (lot 5 ; `run_phase_timing` existe déjà, migration 0016) |
+| AM30 | Durée de chaque étape d'un run | déjà fait : section « Durées » de la page Détail d'un run (`run_phase_timing`, migration 0016) |
 
 ## Corrections (CO)
 
@@ -71,8 +71,8 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 | CO20 | Option fantôme `enable_fundamentals_features` | rien à changer : `features/equity_fundamentals.py` fait partie de l'empreinte du cache de variables et retirer le champ changerait l'empreinte des runs |
 | CO21 | Copies de travail orphelines | fait (25/11 : `PATRICK-wt-lot9` et `PATRICK-wt-topbar` supprimées, branches fusionnées effacées) |
 | CO22 | 9 tests sautés ou en échec attendu | rien à changer : tous les sauts dépendent de l'environnement (Windows, Node, gymnasium, git) ; le test au tirage fixe du simulateur tourne bien |
-| CO23 | Synchronisation en échec la nuit du 23/11 | à faire (lot 5) |
-| CO24 | Protection automatique de l'aperçu | à faire (lot 5) |
+| CO23 | Synchronisation en échec la nuit du 23/11 | fait (lots 4-5 : cause = lecteur F:\ du Google Drive absent ; `sync auto` le note « Reporté » au lieu d'échouer) |
+| CO24 | Protection automatique de l'aperçu | déjà fait : depuis l'incident du 10/10, le cache local écrit par fichier temporaire puis remplacement (`storage/cache_manager.save_dataframe`) : deux écritures simultanées ne laissent plus de fichier tronqué |
 | CO25 | Décisions des banques centrales lues dans les titres | à faire (lot 8) |
 | CO26 | Jours de changement d'échéance des contrats à terme | fait en partie (lot 6 : `patrick audit futures-rolls` repère les sauts au-delà de 5 écarts robustes près d'une échéance) ; retirer ces jours des étiquettes = décision (change tous les runs de contrats à terme) |
 | CO27 | Erreurs pyright « valeur peut-être absente » | fait en partie (lots 2-3 : accès à None gardés dans les ordres limite, le transfert de mouvements et la sélection des fonds ; reste du bruit d'annotations pandas) |
@@ -92,7 +92,7 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 | FO6 | Cible à barrières triples | décision : le module `features/triple_barrier.py` existe ; en faire une cible change l'étiquette lue par une vingtaine de consommateurs (même blocage que la cible de volatilité, ADR 0011) |
 | FO7 | Régime HMM comme variable | déjà fait : variable `hmm_filtered_stress_prob` (régime filtré par HMM, sans regard vers le futur) dans `features/vol_models.py` |
 | FO8 | Score de robustesse d'un champion | fait (lot 6 : `validation/robustness.py`, note sur 100 en tête de la page d'un run, avec ce qui manque) |
-| FO9 | Ré-entraînement automatique en cas de dérive | à faire (lot 5) |
+| FO9 | Ré-entraînement automatique en cas de dérive | fait, réglage à toi (lots 4-5 : `patrick retrain auto`, dernière étape de la nuit, met en file les premiers runs conseillés dans le budget `auto_retrain_per_week` ; 0 par défaut) |
 | FO10 | Rejouer la règle de sélection des fonds | déjà fait en partie : écart holdout / réel par champion sur /reel (D29) ; rejouer la sélection dans le passé contredit la règle à sens unique du pilote (une règle ne rejoue jamais le passé avec une sélection d'aujourd'hui) |
 | FO11 | Mode « et si » d'un fonds | déjà fait en partie : « Aperçu » du pilote (réglages essayés sans être appliqués) ; une courbe rejouée irait contre la même règle à sens unique |
 | FO12 | Historique daté des réglages d'un fonds | fait (lot 7 : migration 0060 `fund_settings_log`, chaque activation, changement et désactivation daté avec les réglages changés ; « Historique des réglages » dans le panneau) |
@@ -113,7 +113,7 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 | FO27 | Assistant de lancement par objectif | à faire (lot 9) |
 | FO28 | Résumé du matin lisible sur téléphone | à faire (lot 9) |
 | FO29 | Mode démo sur base synthétique | à faire (lot 9) |
-| FO30 | Sauvegarde hors site chiffrée | à faire (lot 5) |
+| FO30 | Sauvegarde hors site chiffrée | fait, mise en place à toi (lots 4-5 : `patrick storage offsite --to <dossier>` et `offsite-restore` : instantané, zstd ou gzip, AES-256-GCM, phrase dans `PATRICK_BACKUP_PASSPHRASE`, 3 copies gardées ; dépendance facultative `[backup]`) |
 
 ## Visuel (VI)
 

@@ -23,6 +23,7 @@ Layout: `<root>/<key[:2]>/<key>.parquet`, atomic writes (temp file +
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -148,7 +149,7 @@ def load(key: str) -> pd.DataFrame | None:
     return frame
 
 
-def save(key: str, df: pd.DataFrame) -> None:
+def save(key: str, df: pd.DataFrame, compute_s: float | None = None) -> None:
     path = _path(key)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=".", suffix=".parquet.tmp", dir=path.parent)
@@ -164,6 +165,10 @@ def save(key: str, df: pd.DataFrame) -> None:
         except OSError:
             pass
         raise
+    if compute_s is not None:
+        # AM7 (25/11) : durée du calcul à côté du fichier ; l'éviction garde plus longtemps un pool cher à refaire (GARCH, Kalman)
+        with contextlib.suppress(OSError):
+            path.with_suffix(".cost").write_text(f"{compute_s:.3f}", encoding="ascii")
     feature_cache_share.publish(key, path)  # au mieux : le fichier neuf rejoint la réserve partagée (jamais d'exception)
 
 
@@ -187,10 +192,11 @@ def cached(stage: str, raw: pd.DataFrame, payload: dict, compute: Callable[[], p
         return hit
     t0 = time.perf_counter()
     out = compute()
-    _count(stage, hit=False, compute_s=time.perf_counter() - t0)
+    elapsed = time.perf_counter() - t0
+    _count(stage, hit=False, compute_s=elapsed)
     if compact:
         out = _to_float32(out)
-        save(key, out)
+        save(key, out, compute_s=elapsed)
         return _to_float64(out)             # même valeur arrondie au premier calcul et aux lectures suivantes
-    save(key, out)
+    save(key, out, compute_s=elapsed)
     return out
