@@ -36,6 +36,8 @@ fund_app = typer.Typer(help="Fonds : règles du mode systématique (ordres gén�
 app.add_typer(fund_app, name="fund")
 sync_app = typer.Typer(help="Partage de la base, des modèles et des données entre PC (GitHub ou dossier).")
 app.add_typer(sync_app, name="sync")
+retrain_app = typer.Typer(help="Ré-entraînement automatique des runs conseillés, dans un budget hebdomadaire (FO9).")
+app.add_typer(retrain_app, name="retrain")
 data_app = typer.Typer(help="Racine de données de ce PC (magasin, modèles, caches, sauvegardes) : état, création, déplacement.")
 app.add_typer(data_app, name="data")
 news_app = typer.Typer(help="Nouvelles : collecte point-in-time, notes et rattachement aux actifs (jamais d'entraînement).")
@@ -289,6 +291,8 @@ def worker_cmd(
         600.0, "--idle-timeout", help="Arrêt automatique après N secondes sans job en attente"),
     poll_interval: float = typer.Option(
         1.0, "--poll-interval", help="Intervalle de sondage de la file (secondes)"),
+    if_no_worker: bool = typer.Option(
+        False, "--if-no-worker", help="Ne fait rien si un worker vivant tient déjà la file (tâche planifiée Patrick-Worker)"),
 ) -> None:
     """Job queue worker (Phase 3.1): separate process that executes runs
     submitted from the web interface. Normally launched automatically by the
@@ -296,6 +300,22 @@ def worker_cmd(
     command is for manual launch/debugging, or as a dedicated service if you
     prefer not to rely on auto-spawn."""
     _require_data_root()
+    if if_no_worker:
+        # AM8 (25/11) : la tâche planifiée relance un worker mort sans en lancer un second à côté d'un vivant (deux entraînements à la fois
+        # se disputeraient les processeurs) ; sans job en file, le worker s'arrête seul après `--idle-timeout`.
+        from patrick.tracking import db as trackdb
+        from patrick.tracking import jobs as jobs_db
+
+        conn = trackdb.connect()
+        try:
+            if jobs_db.worker_is_alive(conn):
+                typer.echo("Un worker vivant tient déjà la file : rien à faire.")
+                return
+            if not conn.execute("SELECT 1 FROM job WHERE status = 'queued' LIMIT 1").fetchone():
+                typer.echo("Aucun job en file : rien à faire.")
+                return
+        finally:
+            conn.close()
     worker_module.run_worker_loop(poll_interval=poll_interval, idle_timeout=idle_timeout)
 
 
@@ -955,16 +975,21 @@ def sync_auto_cmd(
 
     folder = _sync_folder(folder)
     lines: list[str] = []
-    try:
-        out = sync.auto(folder, only=only, min_push_hours=min_push_hours)
-    except (sync.SyncError, OSError) as exc:        # un OSError (dossier partagé illisible...) est écrit dans le journal, pas perdu
-        lines.append(f"Refusé : {exc}")
-        code = 1
+    code = 0
+    if folder and not os.path.isdir(folder):
+        # CO23 (25/11) : lecteur du partage absent (Google Drive arrêté, F:\ non monté) : la nuit du 23/11 et les passages horaires
+        # finissaient en échec ou en « WinError 3 » ; c'est un report, pas une panne de PATRICK : rien n'est perdu, tout part au retour du lecteur.
+        lines.append(f"Reporté : dossier de partage introuvable ({folder}) : le client Google Drive est-il lancé ?")
     else:
-        code = 0
-        lines += out["actions"] + [f"Reporté : {line}" for line in out["skipped"]]
-        if not lines:
-            lines.append("Rien à faire : tout est à jour.")
+        try:
+            out = sync.auto(folder, only=only, min_push_hours=min_push_hours)
+        except (sync.SyncError, OSError) as exc:        # un OSError (dossier partagé illisible...) est écrit dans le journal, pas perdu
+            lines.append(f"Refusé : {exc}")
+            code = 1
+        else:
+            lines += out["actions"] + [f"Reporté : {line}" for line in out["skipped"]]
+            if not lines:
+                lines.append("Rien à faire : tout est à jour.")
     for line in lines:
         typer.echo(line)
     if log_file:
@@ -1635,6 +1660,27 @@ def fund_autopilot_off_cmd(strategy: str = typer.Option(..., "--strategy", help=
     finally:
         conn.close()
     typer.echo(f"Pilote désactivé : {out['removed_rules']} règle(s) supprimée(s). Les positions ouvertes restent à fermer à la main.")
+
+
+@retrain_app.command(name="auto")
+def retrain_auto_cmd(
+    budget: int = typer.Option(None, "--budget", help="Runs au plus sur 7 jours (défaut : réglage auto_retrain_per_week, 0 = désactivé)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Affiche ce qui partirait sans rien mettre en file"),
+) -> None:
+    """Met en file les premiers runs conseillés (même liste que le lot « conseillés » de /ml) dans le budget de la semaine (FO9)."""
+    from patrick.tracking import auto_retrain
+
+    out = auto_retrain.run(budget=budget, dry_run=dry_run)
+    if out["budget"] == 0:
+        typer.echo("Ré-entraînement automatique désactivé (réglage auto_retrain_per_week = 0).")
+        return
+    typer.echo(f"Budget : {out['budget']} par semaine, {out['used']} déjà utilisé(s).")
+    for q in out["queued"]:
+        typer.echo(f"{'Partirait' if dry_run else 'En file'} : {q['target']} ({q['key']})")
+    for sk in out["skipped"]:
+        typer.echo(f"Sauté : {sk['target']} : {sk['reason']}")
+    if not out["queued"]:
+        typer.echo("Rien à mettre en file.")
 
 
 if __name__ == "__main__":

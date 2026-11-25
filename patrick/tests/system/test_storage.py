@@ -297,3 +297,51 @@ def test_vacuum_reports_the_size_after_the_journal_is_truncated(tmp_path, monkey
     assert result.exit_code == 0 and "base après VACUUM" in result.output and "avant" in result.output
     wal = tmp_path / "patrick.db-wal"
     assert not wal.exists() or wal.stat().st_size == 0                                     # le journal ne gonfle pas la taille affichée
+
+
+def test_feature_eviction_keeps_an_expensive_pool_longer_than_a_cheap_one(tmp_path):
+    """AM7 (25/11) : à date de lecture égale, le pool qui a coûté dix minutes de calcul reste ; le pool gratuit part d'abord."""
+    import os
+
+    from patrick.storage import cache_eviction
+
+    now = 2_000_000_000.0
+    files = {}
+    for name, cost in (("cheap", None), ("dear", 600.0)):
+        path = tmp_path / "ab" / f"{name}.parquet"
+        path.parent.mkdir(exist_ok=True)
+        path.write_bytes(b"x" * 1000)
+        os.utime(path, (now - 10 * 3600, now - 10 * 3600))          # lus tous deux il y a 10 h
+        if cost is not None:
+            path.with_suffix(".cost").write_text(str(cost), encoding="ascii")
+        files[name] = path
+    out = cache_eviction.evict_feature_cache(max_bytes=1500, root=tmp_path, now=now)
+    assert out["removed_files"] == 1 and not files["cheap"].exists() and files["dear"].exists()
+
+
+def test_feature_eviction_never_removes_a_file_read_less_than_an_hour_ago_even_if_cheap(tmp_path):
+    import os
+
+    from patrick.storage import cache_eviction
+
+    now = 2_000_000_000.0
+    path = tmp_path / "ab" / "fresh.parquet"
+    path.parent.mkdir()
+    path.write_bytes(b"x" * 1000)
+    os.utime(path, (now - 60, now - 60))
+    out = cache_eviction.evict_feature_cache(max_bytes=10, root=tmp_path, now=now)
+    assert out["removed_files"] == 0 and path.exists()
+
+
+def test_pool_cache_records_how_long_a_pool_took_to_compute(tmp_path, monkeypatch):
+    import pandas as pd
+
+    from patrick.features import pool_cache
+
+    monkeypatch.setenv("PATRICK_FEATURE_CACHE_ROOT", str(tmp_path))
+    monkeypatch.setattr(pool_cache.feature_cache_share, "fetch", lambda key, path: False)
+    monkeypatch.setattr(pool_cache.feature_cache_share, "publish", lambda key, path: None)
+    raw = pd.DataFrame({"a": [1.0, 2.0, 3.0]}, index=pd.date_range("2020-01-01", periods=3))
+    pool_cache.cached("unit", raw, {"v": 1}, lambda: raw * 2)
+    costs = list(tmp_path.rglob("*.cost"))
+    assert len(costs) == 1 and float(costs[0].read_text(encoding="ascii")) >= 0

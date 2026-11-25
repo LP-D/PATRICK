@@ -254,6 +254,41 @@ def share_feature_cache_cmd(
         raise typer.Exit(code=1)
 
 
+@storage_app.command(name="offsite")
+def offsite_cmd(
+    to: str = typer.Option(..., "--to", help="Dossier de destination (Drive, clé USB...)"),
+    keep: int = typer.Option(3, "--keep", help="Nombre de copies gardées dans ce dossier"),
+) -> None:
+    """Copie hors site chiffrée de la base (FO30) : instantané, compression (zstd sous Python 3.14, sinon gzip), AES-256-GCM.
+
+    Phrase secrète : variable d'environnement PATRICK_BACKUP_PASSPHRASE (12 caractères au moins), jamais sur la ligne de commande."""
+    from patrick.storage import offsite
+    from patrick.tracking import db as trackdb
+
+    try:
+        out = offsite.make_offsite_copy(trackdb.default_db_path(), to, keep=keep)
+    except offsite.OffsiteError as exc:
+        typer.echo(f"Refusé : {exc}")
+        raise typer.Exit(code=1) from None
+    typer.echo(f"Copie chiffrée : {out['path']} ({out['compression']}, {_gb(out['db'])} -> {_gb(out['encrypted'])}), {out['kept']} gardée(s).")
+
+
+@storage_app.command(name="offsite-restore")
+def offsite_restore_cmd(
+    source: str = typer.Argument(..., help="Fichier patrick-*.db.*.enc"),
+    out: str = typer.Option(..., "--out", help="Base à créer (jamais la base en service)"),
+) -> None:
+    """Déchiffre une copie hors site vers un fichier neuf et vérifie son intégrité (PATRICK_BACKUP_PASSPHRASE)."""
+    from patrick.storage import offsite
+
+    try:
+        done = offsite.restore_offsite_copy(source, out)
+    except offsite.OffsiteError as exc:
+        typer.echo(f"Refusé : {exc}")
+        raise typer.Exit(code=1) from None
+    typer.echo(f"Base restaurée : {done['path']} ({_gb(done['size'])}), intégrité {done['integrity']}.")
+
+
 @storage_app.command(name="vacuum")
 def vacuum_cmd(yes: bool = typer.Option(False, "--yes", help="Confirme (réécrit tout le fichier ; arrêter aussi `patrick serve`)")) -> None:
     """Rend l'espace libéré au disque (VACUUM). Réécrit toute la base : demande autant d'espace libre que son poids."""
