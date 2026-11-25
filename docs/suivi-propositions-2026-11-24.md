@@ -50,10 +50,10 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | B3 | Supprimer la branche après fusion (réglage GitHub) | fait (réglage du dépôt activé le 24/11 ; vérifié : la branche du lot 1 a disparu seule après fusion) |
 | B4 | Tests de mutation : renforcer `dsr` et `diebold_mariano` | fait en partie (lot 3 : `tests/validation/test_dsr_dm_reference.py`, valeurs exactes contre une réimplémentation indépendante) ; taux de mutants tués à remesurer au prochain passage mensuel de `mutation.yml` |
 | B5 | Remplacer les `except Exception` larges | fait (lot 2 : les 21 replis silencieux journalisés ; les 113 autres laissaient déjà une trace) |
-| B6 | Découper `webapp/app.py` | à faire |
-| B7 | Découper `pipeline/engine.py` | à faire |
-| B8 | Séparer lecture / écriture dans `tracking/db.py` et `history.py` | à faire |
-| B9 | Découper `patrick.css` | à faire |
+| B6 | Découper `webapp/app.py` | fait en partie (lot 9 : fragments de la fiche d'un actif sortis vers `webapp/routes/assets.py`, app.py 3 064 -> 2 975 lignes ; le reste à découper par blocs de routes, même méthode) |
+| B7 | Découper `pipeline/engine.py` | fait en partie (lot 9 : identité d'un run (`_config_hash`, `_features_payload`) sortie vers `pipeline/identity.py`, réexportée ; golden local identique) |
+| B8 | Séparer lecture / écriture dans `tracking/db.py` et `history.py` | fait en partie (lot 9 : lectures groupées des runs sorties vers `tracking/run_queries.py`, lecture seule, réexportées ; db.py 1 687 -> 1 330 lignes) |
+| B9 | Découper `patrick.css` | fait (lot 9 : `patrick.css` (socle : jetons, base, coque, composants) et `patrick-pages.css` (styles des pages), chargées dans le même ordre ; rendu vérifié) |
 | B10 | Sélection SHAP une fois par (données, pli) | fait (lot 4 : `shap_order`, un seul pilote SHAP pour toute la grille de N, sélections identiques ; méthode shap seulement) |
 | B11 | Pools paramétriques par pli en parallèle | déjà fait (`features/parametric_parallel.py`, `PATRICK_PARAMETRIC_JOBS`, réglage de la page « Lancer ») |
 | B12 | Cache des plis préparés | écarté : gain direct mesuré faible (NEXT_STEPS, Sprint 2) |
