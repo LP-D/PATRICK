@@ -94,6 +94,20 @@ def register(app: FastAPI, templates, i18n_context) -> None:
         return templates.TemplateResponse(request, "_pooled_heatmap.html", {**i18n_context(request), "grid": grid})
 
 
+    @app.get("/fragments/model-set/{symbol}")
+    def model_set_fragment(request: Request, symbol: str):
+        """FO1/FO2 (25/11) : ensemble de confiance de modèles (MCS) et test SPA de chaque horizon à champion de l'actif."""
+        from patrick.validation import model_set
+        if symbol not in forms.TARGET_SOURCE_BY_SYMBOL:
+            raise HTTPException(status_code=404, detail="Cible inconnue")
+        conn = trackdb.connect()
+        try:
+            horizons = [h for (h,) in conn.execute("SELECT horizon FROM champion WHERE target = ? ORDER BY horizon", (symbol,))]
+            results = [model_set.evaluate(conn, symbol, h, reps=500) for h in horizons]
+        finally:
+            conn.close()
+        return templates.TemplateResponse(request, "_model_set.html", {**i18n_context(request), "results": results})
+
     @app.get("/fragments/champion-history/{symbol}")
     def champion_history_fragment(request: Request, symbol: str):
         """Frise des champions d'un actif (D26) : qui a tenu le titre à chaque horizon, de quand à quand. Chargé après l'affichage."""

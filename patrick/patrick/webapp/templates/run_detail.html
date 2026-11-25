@@ -139,6 +139,12 @@
 {{ metric(t('rd_corr_short'), "—", t('rd_corr_none', n=detail.holdout_diag.n_trials), "disabled") }}
 {% endif %}
 
+{# FO8 (25/11) : score de robustesse, les preuves de cette page rassemblées (validation/robustness.py) ; la note dit ce qui manque. #}
+{% if run_method.robustness %}{% set rb = run_method.robustness %}
+{% set missing = [] %}{% for part in rb.parts if not part.ok %}{% set _ = missing.append(t('rb_' ~ part.key)) %}{% endfor %}
+{{ metric(t('rd_robust'), rb.score ~ ' / ' ~ rb.max, (t('rd_robust_missing', l=missing | join(', ')) if missing else t('rd_robust_all')),
+          {'solid': 'ok', 'confirm': 'neutral', 'weak': 'warning'}[rb.grade]) }}
+{% endif %}
 {# Méthode d'évaluation et règle d'alignement du run (ADR 0007 et 0008) : deux runs de méthodes différentes ne se comparent pas. #}
 {{ metric(t('rd_method'), t('rd_method_value', m=run_method.method, a=run_method.session_rule),
           t('rd_method_2_hint') if run_method.method >= 2 else t('rd_method_1_hint'),

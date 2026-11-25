@@ -1,0 +1,19 @@
+{# FO1/FO2 (25/11, validation/model_set.py) : par horizon à champion, modèles indiscernables du meilleur (MCS) et test SPA contre le pile ou face. #}
+{% if not results %}
+<p class="hint">{{ t('ms_none') }}</p>
+{% else %}
+{% for r in results %}
+<h3 class="ch-h">{{ r.horizon | hlabel }} <span class="hint">· {{ t('ms_n', m=r.n_models, n=r.n_obs) }}</span></h3>
+{% if r.reason %}
+<p class="hint">{{ t.tx(r.reason) }}</p>
+{% else %}
+<p>{{ t('ms_mcs', k=r.mcs.included | length, m=r.n_models, s=(r.mcs.size * 100) | round | int) }}
+{% if r.mcs.champion_in is true %}<span class="tag">{{ t('ms_champion_in') }}</span>{% elif r.mcs.champion_in is false %}<span class="tag tag-suspect">{{ t('ms_champion_out') }}</span>{% endif %}</p>
+<p>{{ t('ms_spa', p='%.3f' | format(r.spa.p_consistent)) }}
+{% if r.spa.p_consistent < 0.05 %}<span class="tag">{{ t('ms_spa_yes') }}</span>{% else %}<span class="tag tag-suspect">{{ t('ms_spa_no') }}</span>{% endif %}</p>
+<ul class="ch-list">
+{% for run_id in r.mcs.included %}<li class="pk-mono"><a href="/runs/{{ run_id | urlencode }}/analyse">{{ run_id }}</a> · Brier {{ '%.4f' | format(r.mcs.mean_loss[run_id]) }}{% if run_id == r.champion_run %} ★{% endif %}</li>{% endfor %}
+</ul>
+{% endif %}
+{% endfor %}
+{% endif %}
