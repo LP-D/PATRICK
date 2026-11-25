@@ -314,6 +314,14 @@
         if (!req) return;
         req.position_id = p.position_id;
         if (p.fees.source === "estimated") req.fee_seed = p.fees.seed;
+        // A12 : prix limite renseigné -> ordre en attente, de la quantité de l'aperçu (un montant y est déjà converti)
+        var limit = form.limit_price ? form.limit_price.value : "";
+        if (present(limit)) {
+            req.limit_price = limit;
+            req.quantity = p.quantity;
+            if (form.expires_on && present(form.expires_on.value)) req.expires_on = form.expires_on.value;
+            delete req.price;
+        }
         submit.disabled = true;
         try {
             await call("/api/fund/strategies/" + encodeURIComponent(req.strategy_id) + "/orders", "POST", req);

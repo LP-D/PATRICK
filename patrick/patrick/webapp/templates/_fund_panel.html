@@ -340,6 +340,32 @@
   {% endif %}
 </section>
 
+{# A12 : ordres limite (fund/limit_orders.py) ; ceux en attente s'annulent ici, leurs exécutions sont de vrais ordres (note « limit:<id> »). #}
+{% if limit_orders %}
+<h3>{{ t('fund_limit_title') }} <span class="hint">({{ limit_orders | length }})</span></h3>
+<div class="table-scroll">
+  <table class="data-table fund-limit-orders">
+    <thead>
+      <tr><th>{{ t('fund_limit_col_symbol') }}</th><th>{{ t('fund_limit_col_dir') }}</th><th class="num pk-mono">{{ t('fund_limit_col_limit') }}</th>
+          <th class="num pk-mono">{{ t('fund_limit_col_filled') }}</th><th>{{ t('fund_limit_col_until') }}</th><th>{{ t('fund_limit_col_status') }}</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for lo in limit_orders %}
+      <tr>
+        <td><span class="instr" title="{{ lo.symbol }}">{{ lo.symbol | iname }}</span></td>
+        <td>{{ t('fund_limit_' ~ lo.direction) }}</td>
+        <td class="num pk-mono">{{ '%.4g' | format(lo.limit_price) }}</td>
+        <td class="num pk-mono">{{ '%g' | format(lo.filled_quantity) }} / {{ '%g' | format(lo.quantity) }}</td>
+        <td class="pk-mono nowrap">{{ lo.expires_on }}</td>
+        <td><span class="tag"{% if lo.message %} title="{{ lo.message }}"{% endif %}>{{ t('fund_limit_st_' ~ lo.status) }}</span></td>
+        <td>{% if lo.status in ('open', 'partial') %}<button type="button" class="btn-ghost" data-act="limit-cancel" data-limit-id="{{ lo.limit_id }}">{{ t('fund_limit_cancel') }}</button>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
 <h3>{{ t('fund_rules_title') }} <span class="hint">({{ rules | length }})</span></h3>
 <p class="hint">{{ t('fund_rules_hint') }}</p>
 {% if rules %}

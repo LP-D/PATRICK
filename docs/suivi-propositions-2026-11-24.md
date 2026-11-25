@@ -21,9 +21,9 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | A9 | Dimensionnement par bandit après frais | déjà fait (ADR 0015 : bandit LinUCB et Kelly ridge mesurés après frais sur 459 champions ; moins bons que le seuil fixe, non adoptés) |
 | A10 | RL : A2C / SAC / DQN comparés à PPO | à faire |
 | A11 | Brancher `research/phase9.py` sur les fonds | fait en partie (lot 7b : `fund/regime.py`, régime de marché de phase9 (VIX, S&P 500) affiché sur /fonds avec ses déclencheurs ; pas de modulation de l'exposition, non mesurée) |
-| A12 | Ordres limite et exécutions partielles | à faire |
+| A12 | Ordres limite et exécutions partielles | fait (lot 7c : `fund/limit_orders.py`, migration 0059 : ordres limite à validité, exécutés sur les séances suivantes au prix de la limite ou de l'ouverture, tranches d'au plus 10 % du volume ; résolus chaque nuit avant les cycles ; champ « Prix limite » du ticket, liste et annulation dans le panneau) |
 | A13 | Ordres manuels sur un fonds | déjà fait (saisie d'un ordre ou d'une position à la main : « Nouvelle position », `/api/fund/strategies/{id}/orders`) ; « 0 ordre manuel » était un constat d'usage |
-| A14 | Reprise d'un run au niveau du scan | à faire |
+| A14 | Reprise d'un run au niveau du scan | fait (lot 7c : `pipeline/scan_checkpoint.py`, chaque ajustement du scan est écrit (clé : identité du lancement + contenu exact du pli) et relu par une reprise ; le worker reprend sur la configuration enregistrée du lancement interrompu ; golden local identique ; reprise testée : zéro ajustement refait, classement identique) |
 | A15 | Notifications Windows | fait (lot 7 : notification Windows de fin de nuit s'il y a quelque chose à signaler, préférence `notify_night`) |
 | A16 | Rapport hebdomadaire PDF | fait (lot 7b : `core/text_pdf.py`, PDF sans dépendance ; lien PDF à côté de chaque rapport sur /sante) |
 | A17 | Calendrier économique superposé aux cours | fait (lot 7b : `data/econ_calendar.py`, migration 0058 : dates FRED d'IPC, emploi, PIB, PCE, ventes (passées et à venir) rafraîchies avec les nouvelles ; décisions Fed/BCE/BoE/BoC lues dans les titres des communiqués ; repères sur la courbe de chaque actif, agenda sur /news) |

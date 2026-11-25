@@ -96,7 +96,7 @@ from patrick.models.uniqueness import (
     build_indicator_matrix,
     effective_sample_size,
 )
-from patrick.pipeline import early_stop_shadow, parallel, pause
+from patrick.pipeline import early_stop_shadow, parallel, pause, scan_checkpoint
 from patrick.pipeline.leaderboard import Leaderboard
 from patrick.selection import universe_reduction
 from patrick.selection._common import RANKING_VERSION
@@ -1736,6 +1736,7 @@ class _RunState:
     # champion duel puts them back if the challenger is rejected (`champion_duel.duel_and_promote`).
     drift_reference_before: dict[int, list[tuple]] = field(default_factory=dict)
     early_stop_shadow: dict[int, dict] = field(default_factory=dict)   # `early_stop_shadow.observe` : note par horizon, sans effet sur le run
+    scan_checkpoint: object | None = None   # A14 : `scan_checkpoint.ScanCheckpoint` (écrit toujours, relu par une reprise seulement)
 
     @property
     def is_walkforward(self) -> bool:
@@ -1848,6 +1849,40 @@ def _trial_id_for(st: _RunState, run_id: str, trial_key: tuple) -> int:
     return st.trial_ids[trial_key]
 
 
+def _scan_checkpoint_for(config: RunConfig, snapshot_id: str, config_hash: str, seed: int, resumed: bool):
+    """Points de reprise du scan de ce lancement (A14) ; None si le dossier de sortie est inutilisable (le run continue sans)."""
+    try:
+        ckpt = scan_checkpoint.ScanCheckpoint(config.output.dir, {
+            "config_hash": config_hash, "snapshot_id": snapshot_id, "seed": seed, "git": trackdb.current_git_sha(),
+            "features_code": pool_cache.FEATURE_CODE_HASH}, read=resumed)
+        ckpt.purge_old()
+    except OSError as exc:
+        print(f"  [WARN] points de reprise du scan indisponibles : {exc}")
+        return None
+    return ckpt
+
+
+def _fit_with_checkpoint(st: _RunState, key: str | None, compute):
+    """Résultat d'un ajustement du scan : relu d'une reprise si la même clé existe, sinon calculé puis enregistré."""
+    ckpt = st.scan_checkpoint
+    if ckpt is None or key is None:
+        return compute()
+    cached = ckpt.load(key)
+    if cached is not None:
+        return cached
+    result = compute()
+    ckpt.save(key, result)
+    return result
+
+
+def _fit_key(st: _RunState, fold_digest: str, horizon: int, k: int, regime: str, screen: bool, cols, candidate) -> str | None:
+    if st.scan_checkpoint is None:
+        return None
+    n_feat, sampler_name, algo = candidate
+    return st.scan_checkpoint.key(fold=fold_digest, horizon=horizon, k=k, regime=regime, screen=screen, cols=[int(c) for c in cols],
+                                  N=n_feat, sampler=sampler_name, algo=algo, seed=st.seed)
+
+
 def _scan_walkforward_fold(st: _RunState, horizon: int, run_id: str, k: int, regime: str,
                            candidate_filter: set[tuple[int, str, str]] | None = None,
                            screen: bool = False) -> None:
@@ -1890,6 +1925,9 @@ def _scan_walkforward_fold(st: _RunState, horizon: int, run_id: str, k: int, reg
     if config.models.stacking:
         fit_kwargs["stack"] = config.models.stack_settings()          # idem : les processus de calcul parallèle reçoivent le panel d'empilement
     jobs = parallel.resolve_jobs(len(active_candidates), int(fd.X_tr.nbytes + fd.X_te.nbytes))
+    # A14 : empreinte du contenu exact du pli (matrices, cibles, poids) pour les points de reprise du scan
+    fold_digest = (scan_checkpoint.digest(fd.X_tr, fd.y_tr, fd.X_te, fd.y_te, fd.sample_weight, fd.value)
+                   if st.scan_checkpoint is not None else "")
     fit_results = {}
     if jobs > 1:
         # Sprint 2 (exact): selections then fits of the whole grid computed by worker
@@ -1897,19 +1935,30 @@ def _scan_walkforward_fold(st: _RunState, horizon: int, run_id: str, k: int, reg
         cols_by_n = _select_batch(st.conn, st.target_col, horizon, st.snapshot_id, config,
                                   [(fd.X_tr, fd.y_tr, n) for n in grid], st.seed, jobs)
         cols_for_n = dict(zip(grid, cols_by_n, strict=True))
+        ckpt_keys = {cand: _fit_key(st, fold_digest, horizon, k, regime, screen, cols_for_n[cand[0]], cand)
+                     for cand in active_candidates}
+        for cand in active_candidates:                    # A14 : ce qu'une reprise retrouve n'est pas recalculé
+            cached = st.scan_checkpoint.load(ckpt_keys[cand]) if ckpt_keys[cand] is not None else None
+            if cached is not None:
+                fit_results[cand] = cached
+        todo = [cand for cand in active_candidates if cand not in fit_results]
         fit_tasks = [
             ("fit_eval_full",
              (fd.X_tr[:, cols_for_n[n]], fd.y_tr, fd.X_te[:, cols_for_n[n]], fd.y_te,
               sampler_name, algo, st.seed), fit_kwargs)
-            for n, sampler_name, algo in active_candidates
+            for n, sampler_name, algo in todo
         ]
         fit_keys = [
             (tuple(cols_for_n[n]), sampler_name, algo, st.seed, config.models.calibration,
              config.models.calibration_method, horizon, config.sampling.uniqueness_weights)
-            for n, sampler_name, algo in active_candidates
+            for n, sampler_name, algo in todo
         ]
-        fit_results = dict(zip(active_candidates, parallel.run_ordered(
-            fit_tasks, jobs, deduplicate_keys=fit_keys), strict=True))
+        computed = (dict(zip(todo, parallel.run_ordered(fit_tasks, jobs, deduplicate_keys=fit_keys), strict=True))
+                    if todo else {})
+        for cand, result in computed.items():
+            if ckpt_keys[cand] is not None:
+                st.scan_checkpoint.save(ckpt_keys[cand], result)
+        fit_results.update(computed)
     for i_n, n_feat in enumerate(grid):
         cols = (cols_by_n[i_n] if jobs > 1
                 else _select(st.conn, st.target_col, horizon, st.snapshot_id, config, fd.X_tr, fd.y_tr, n_feat, st.seed))
@@ -1924,8 +1973,10 @@ def _scan_walkforward_fold(st: _RunState, horizon: int, run_id: str, k: int, reg
                 if jobs > 1:
                     met, y_pred, confidence, p_up = fit_results[candidate]
                 else:
-                    met, y_pred, confidence, p_up = _fit_eval_full(
-                        X_tr_n, fd.y_tr, X_te_n, fd.y_te, sampler_name, algo, st.seed, **fit_kwargs)
+                    met, y_pred, confidence, p_up = _fit_with_checkpoint(
+                        st, _fit_key(st, fold_digest, horizon, k, regime, screen, cols, candidate),
+                        lambda X_tr_n=X_tr_n, X_te_n=X_te_n, sampler_name=sampler_name, algo=algo: _fit_eval_full(
+                            X_tr_n, fd.y_tr, X_te_n, fd.y_te, sampler_name, algo, st.seed, **fit_kwargs))
                 if screen:
                     st.n_scan_evals += 1
                     st.screen_rows.setdefault((horizon, regime), []).append(
@@ -2519,6 +2570,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     FRED vintage than the one the interrupted run was launched on. `None`
     (default, every fresh run) keeps the regular `ingest()` path."""
     refuse_non_target(config, resumed=snapshot_id is not None)
+    resumed = snapshot_id is not None
     mode = config.selection.screening_mode
     if mode in ("staged", "total_window") and config.validation.scheme != "walkforward":
         raise ValueError("La présélection progressive nécessite le schéma walk-forward.")
@@ -2558,6 +2610,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                        seed=seed, t0=t0, snapshot_id=snapshot_id, config_hash=config_hash, run_ids=run_ids,
                        all_dates_full=raw.index)
         st.universe = _FoldUniverse(raw, st.target_col, config)
+        st.scan_checkpoint = _scan_checkpoint_for(config, snapshot_id, config_hash, seed, resumed)
         st.record_phase_all_runs("ingestion", t_ingest_start, t_ingest_end)
 
         t_pool_start = time.time()
@@ -2615,6 +2668,10 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                     conn, run_ids[final_horizon], metric="F1_dir")
 
         _finish_runs(st)
+        if st.scan_checkpoint is not None:                 # A14 : run terminé, ses points de reprise ne servent plus
+            if st.scan_checkpoint.hits:
+                print(f"[REPRISE] {st.scan_checkpoint.hits} ajustement(s) du scan repris du lancement interrompu.")
+            st.scan_checkpoint.clear()
         # KPI summary of this launch (per algorithm, per number of features,
         # ranking, best per horizon): printed in the worker log, returned for
         # the job summary and the web page. Never fails a finished run.

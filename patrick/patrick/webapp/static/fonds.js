@@ -614,6 +614,9 @@
             if (act === "delete-position") {
                 await call("/api/fund/positions/" + encodeURIComponent(btn.getAttribute("data-position-id")), "DELETE");
                 reload(current);
+            } else if (act === "limit-cancel") {               // A12 : annule un ordre limite en attente (ses exécutions restent)
+                await call("/api/fund/limit-orders/" + encodeURIComponent(btn.getAttribute("data-limit-id")) + "/cancel", "POST", {});
+                open(current);
             } else if (act === "delete-strategy") {
                 await call("/api/fund/strategies/" + encodeURIComponent(btn.getAttribute("data-strategy-id")), "DELETE");
                 reload(null);

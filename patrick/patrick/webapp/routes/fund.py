@@ -291,13 +291,16 @@ def register(app: FastAPI, templates, context) -> None:
         today = service.current_date()
 
         def run(conn):
+            from patrick.fund import limit_orders
             snap = service.strategy_snapshot(conn, _require_strategy(conn, strategy_id), today)
             rules = systematic.rule_summaries(conn, strategy_id)
-            return snap, rules, autopilot.status(conn, strategy_id, rules), _insight(conn, strategy_id, snap, today)
-        snap, rules, auto, seen = _call(run)
+            return (snap, rules, autopilot.status(conn, strategy_id, rules), _insight(conn, strategy_id, snap, today),
+                    limit_orders.list_for(conn, strategy_id)[:20])
+        snap, rules, auto, seen, limits = _call(run)
         manual = [r for r in rules if not (r["config"].get("managed") or {}).get("by")]     # celles du pilote : dans son bloc
         return templates.TemplateResponse(request, "_fund_panel.html", {
-            "snap": snap, "rules": manual, "autopilot": auto, "insight": seen, "today": today.isoformat(), **context(request)})
+            "snap": snap, "rules": manual, "autopilot": auto, "insight": seen, "today": today.isoformat(), "limit_orders": limits,
+            **context(request)})
 
     @app.get("/api/fund/strategies/{strategy_id}/vitrine.html")
     def api_strategy_showcase(strategy_id: str):
@@ -400,7 +403,29 @@ def register(app: FastAPI, templates, context) -> None:
     @app.post("/api/fund/strategies/{strategy_id}/orders")
     async def api_place_order(request: Request, strategy_id: str):
         b = await _json_body(request)
+        if b.get("limit_price") not in (None, ""):          # A12 : ordre limite, exécuté sur les séances suivantes (fund/limit_orders.py)
+            from patrick.fund import limit_orders
+
+            def run(conn):
+                row = limit_orders.create(conn, {**b, "strategy_id": strategy_id}, b["limit_price"], expires_on=b.get("expires_on") or None,
+                                          participation=float(b.get("participation") or limit_orders.DEFAULT_PARTICIPATION))
+                return {"limit_order": row}
+            return await run_in_threadpool(_call, run)
         return await run_in_threadpool(_call, service.place_order, {**b, "strategy_id": strategy_id})
+
+    @app.get("/api/fund/strategies/{strategy_id}/limit-orders")
+    def api_limit_orders(strategy_id: str):
+        from patrick.fund import limit_orders
+
+        def run(conn):
+            _require_strategy(conn, strategy_id)
+            return {"limit_orders": limit_orders.list_for(conn, strategy_id)}
+        return _call(run)
+
+    @app.post("/api/fund/limit-orders/{limit_id}/cancel")
+    def api_cancel_limit_order(limit_id: int):
+        from patrick.fund import limit_orders
+        return _call(lambda conn: {"limit_order": limit_orders.cancel(conn, limit_id)})
 
     @app.patch("/api/fund/orders/{order_id}")
     async def api_correct_order(request: Request, order_id: int):

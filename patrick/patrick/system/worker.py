@@ -390,6 +390,16 @@ def _resume_snapshot(conn, job_id: str, resume_count: int) -> str | None:
     return row[0] if row else None
 
 
+def _resume_config(conn, job_id: str, snapshot_id: str | None) -> str | None:
+    """Configuration ENREGISTRÉE du lancement interrompu (celle que `run_pipeline` a complétée : règle de séance, version de méthode...),
+    comme `patrick resume` : la reprise garde la même empreinte, donc ses études Optuna et ses points de reprise du scan (A14)."""
+    if snapshot_id is None:
+        return None
+    row = conn.execute("SELECT config_json FROM run WHERE job_id = ? AND snapshot_id = ? AND error = ? ORDER BY started_at DESC, rowid DESC "
+                       "LIMIT 1", (job_id, snapshot_id, jobs_db.INTERRUPTED_RUN_ERROR)).fetchone()
+    return row[0] if row and row[0] else None
+
+
 def _run_pipeline_for_job(config: RunConfig, job_id: str, snapshot_id: str | None) -> dict:
     """`run_pipeline` d'un job ; une reprise dont l'instantané a disparu du magasin (cache purgé) repart sur les données du jour plutôt
     que d'échouer : les essais Optuna déjà faits sont repris dans les deux cas."""
@@ -422,6 +432,9 @@ def _run_claimed_job(conn, job: dict, pid: int, raw_config: dict) -> None:
         return
     config = RunConfig.model_validate(raw_config)
     snapshot_id = _resume_snapshot(conn, job_id, int(job.get("resume_count") or 0))
+    stored = _resume_config(conn, job_id, snapshot_id)
+    if stored is not None:
+        config = RunConfig.from_stored_json(stored)
     if job.get("resume_count"):
         on_snapshot = f" sur l'instantané {snapshot_id}" if snapshot_id else ""
         print(f"[REPRISE] job {job_id}, reprise automatique n°{job['resume_count']}{on_snapshot}.")
