@@ -1,0 +1,23 @@
+{# Fragment `/fragments/news-agenda` (A17) : publications américaines à venir (dates officielles FRED, table `econ_release`) et décisions
+   de taux récentes reconnues dans les communiqués collectés (`data/econ_calendar.py`). Étiquettes internes, échappées quand même. #}
+{% from "_components.html" import data_table, empty_state %}
+<h3>{{ t('news_agenda_upcoming') }}</h3>
+{% if not agenda.has_releases %}
+{{ empty_state(t('news_agenda_no_data')) }}
+{% elif not agenda.upcoming %}
+<p class="hint">{{ t('news_agenda_none') }}</p>
+{% else %}
+{% set rows = [] %}
+{% for e in agenda.upcoming %}
+{% set _ = rows.append([e.date, e.label | e, t('news_agenda_today') if e.in_days == 0 else t('news_agenda_in', n=e.in_days)]) %}
+{% endfor %}
+{{ data_table([t('news_agenda_col_day'), t('news_agenda_col_what'), t('news_agenda_col_when')], rows, collapse_after=8) }}
+{% endif %}
+<h3>{{ t('news_agenda_decisions') }}</h3>
+{% if not agenda.decisions %}
+<p class="hint">{{ t('news_agenda_no_decision') }}</p>
+{% else %}
+{% set rows = [] %}
+{% for e in agenda.decisions %}{% set _ = rows.append([e.date, e.label | e]) %}{% endfor %}
+{{ data_table([t('news_agenda_col_day'), t('news_agenda_col_bank')], rows, collapse_after=8) }}
+{% endif %}

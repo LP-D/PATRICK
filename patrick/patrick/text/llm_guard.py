@@ -16,6 +16,7 @@ import pandas as pd
 
 KNOWN_CUTOFFS: dict[str, str] = {
     "claude-sonnet-5-5": "2026-06-30",     # « knowledge cutoff: June 2026 » (invite système du modèle)
+    "claude-opus-5-5": "2026-06-30",       # idem (A27 : questions sur un run, `analysis/run_qa.py`)
 }
 DEFAULT_MARGIN_DAYS = 90
 

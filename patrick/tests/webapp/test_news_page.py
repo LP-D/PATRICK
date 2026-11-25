@@ -44,7 +44,7 @@ def seeded(tmp_path, monkeypatch):
 def test_the_frame_opens_with_figures_and_lazy_blocks(seeded):
     resp = TestClient(app).get("/news")
     assert resp.status_code == 200
-    for needle in ("News et sentiment", "/fragments/news-assets", "/fragments/news-feed", "/fragments/news-central",
+    for needle in ("News et sentiment", "/fragments/news-assets", "/fragments/news-feed", "/fragments/news-central", "/fragments/news-agenda",
                    "Actualiser", "Méthode et limites"):
         assert needle in resp.text
     assert "Sentiment par actif" in resp.text and "surge as profit" not in resp.text      # les titres arrivent par fragment
@@ -80,6 +80,19 @@ def test_feed_fragment_shows_scores_events_and_filters_by_symbol(seeded):
 def test_central_bank_fragment_shows_the_hawkish_tone(seeded):
     text = TestClient(app).get("/fragments/news-central").text
     assert "FOMC statement" in text and "+1.00" in text
+
+
+def test_agenda_fragment_without_and_with_fred_dates(seeded):
+    client = TestClient(app)
+    empty = client.get("/fragments/news-agenda").text
+    assert "Calendrier pas encore chargé" in empty
+    conn = db.connect(seeded)
+    upcoming = (pd.Timestamp.now() + pd.Timedelta(days=3)).strftime("%Y-%m-%d")
+    conn.execute("INSERT INTO econ_release (day, release_id, label) VALUES (?, 10, 'IPC')", (upcoming,))
+    conn.commit()
+    conn.close()
+    text = client.get("/fragments/news-agenda").text
+    assert upcoming in text and "IPC" in text and "dans 3 j" in text
 
 
 def test_full_page_shows_every_block(seeded):

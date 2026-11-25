@@ -10,8 +10,9 @@ Critères (volontairement stricts, à relire avec les premiers résultats) :
 Une nouvelle « utilisable » est vue dans les 72 h suivant sa publication (`service.MAX_LAG_HOURS`) : les nouvelles rattrapées
 longtemps après n'ont pas d'heure de connaissance fiable.
 
-Rien ici n'est branché sur `RunConfig` : ajouter un champ à `FeaturesConfig` change la clé du cache de variables et l'identité des runs
-existants. Le branchement se fera avec un drapeau explicite, une fois la porte franchie et l'apport mesuré en walk-forward.
+Branchement (A4, 2026-11-25) : drapeau explicite `FeaturesConfig.enable_text_features` (`features/text_features.py`), faux par défaut et
+hors du hachage tant qu'il est faux (aucun run existant ne change d'identité). Un run qui l'active s'arrête sur `require_history` tant que
+la porte n'est pas franchie ; l'apport reste à mesurer en walk-forward quand elle le sera.
 """
 from __future__ import annotations
 

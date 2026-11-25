@@ -73,6 +73,10 @@ def _forget(name: str) -> None:
             del _cache[key]
 
 
+class AskBody(BaseModel):
+    question: str
+
+
 class NoteBody(BaseModel):
     kind: str
     title: str
@@ -288,6 +292,18 @@ def register(app: FastAPI, templates, context) -> None:
     def health_page(request: Request):
         return _health_page(request)
 
+    @app.get("/sante/rapport/{name}.pdf")
+    def health_report_pdf(name: str):
+        """Le rapport hebdomadaire en PDF (A16), sans dépendance (`core/text_pdf.py`)."""
+        from fastapi.responses import Response
+
+        from patrick.core.text_pdf import text_to_pdf
+        text = weekly_report.read(name)
+        if text is None:
+            raise HTTPException(status_code=404, detail="Rapport introuvable")
+        pdf = text_to_pdf(f"PATRICK — {name}", text.splitlines())
+        return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{name.rsplit(".", 1)[0]}.pdf"'})
+
     @app.get("/sante/rapport/{name}", response_class=HTMLResponse)
     def health_report_page(request: Request, name: str):
         return _health_page(request, name)
@@ -334,6 +350,25 @@ def register(app: FastAPI, templates, context) -> None:
     @app.get("/api/carnet/stats")
     async def notebook_stats():
         return JSONResponse(await _journal(research_notes.stats))
+
+    @app.post("/api/runs/{run_id}/ask")
+    def run_ask(run_id: str, body: AskBody):
+        """A27 : question en langage naturel sur un run ; Claude répond depuis les seuls chiffres du run (`analysis/run_qa.py`)."""
+        from patrick.analysis import run_qa
+
+        conn = trackdb.connect()
+        try:
+            ctx = run_qa.run_context(conn, run_id)
+        finally:
+            conn.close()
+        if ctx is None:
+            raise HTTPException(status_code=404, detail="run inconnu")
+        try:
+            return JSONResponse(run_qa.ask(body.question, ctx))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except run_qa.QAUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     @app.post("/api/carnet/notes")
     async def notebook_create(body: NoteBody):

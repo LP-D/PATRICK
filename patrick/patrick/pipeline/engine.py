@@ -165,9 +165,22 @@ def _fracdiff_levels(config: RunConfig) -> bool:
 
 def _features_payload(config: RunConfig) -> dict:
     # La clé de cache ne bouge que pour la méthode 3 : un run de méthode 1 ou 2 retrouve ses réserves déjà calculées.
-    return {"features": config.features.model_dump(mode="json"),
+    features = config.features.model_dump(mode="json")
+    extra: dict = {}
+    # A4 : le drapeau texte n'entre dans la clé que levé (sinon tout le cache existant serait invalidé) ; levé, l'état du magasin de
+    # nouvelles y entre aussi (une nouvelle arrivée après la mise en cache changerait la dernière séance).
+    if not features.get("enable_text_features"):
+        features.pop("enable_text_features", None)
+    else:
+        from patrick.features import text_features
+        extra["text_store"] = text_features.store_fingerprint()
+    # A3 : les modèles de `vol_models_extra` portent leur propre empreinte de code, seulement pour les runs qui les choisissent.
+    from patrick.features import vol_models_extra
+    if set(config.features.vol_models) & set(vol_models_extra.MODELS):
+        extra["vol_extra_code"] = vol_models_extra.CODE_HASH
+    return {"features": features,
             "fred": sorted(config.universe.fred_series), "target": config.objective.target_symbol,
-            **({"raw_level": "fracdiff"} if _fracdiff_levels(config) else {})}
+            **({"raw_level": "fracdiff"} if _fracdiff_levels(config) else {}), **extra}
 
 
 def _stationary_raw(raw: pd.DataFrame, config: RunConfig, target_col: str) -> pd.DataFrame:
@@ -250,6 +263,11 @@ def _build_base_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: s
     # Stock targets: position against the home index / euro-area composite (empty for any other target).
     if config.features.enable_equity_context_features:
         parts.append(equity_context.build_equity_context_features(raw, config.objective.target_symbol))
+
+    # A4 : sentiment des nouvelles de la cible et ton des banques centrales, point-in-time ; refusé si l'historique est trop court.
+    if config.features.enable_text_features:
+        from patrick.features import text_features
+        parts.append(text_features.build_text_features(raw.index, config.objective.target_symbol))
 
     if "technical" in families:
         ohlc = download_ohlc(config.objective.target_symbol, config.universe.start_date)
@@ -1389,8 +1407,13 @@ def _config_hash(config: RunConfig) -> str:
         exclude["validation"] = validation_exclude
     # Idem pour les features de contexte des actions : sans effet sur une cible qui n'est pas une action, et absentes de tout run d'avant
     # le champ ; seul un run d'action qui les active les porte dans son hachage.
+    features_exclude = set()
     if not (config.features.enable_equity_context_features and is_equity_symbol(config.objective.target_symbol)):
-        exclude["features"] = {"enable_equity_context_features"}
+        features_exclude.add("enable_equity_context_features")
+    if not config.features.enable_text_features:                 # A4 : idem, hors du hachage tant qu'il est faux
+        features_exclude.add("enable_text_features")
+    if features_exclude:
+        exclude["features"] = features_exclude
     exclude = exclude or None
     return hashlib.sha256(config.model_dump_json(exclude=exclude).encode()).hexdigest()[:16]
 

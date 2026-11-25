@@ -1,19 +1,31 @@
-"""Événements datés d'un actif à poser sur sa courbe de cours (D3) : changements de champion et publications de résultats.
+"""Événements datés d'un actif à poser sur sa courbe de cours (D3) : changements de champion, publications de résultats et calendrier
+économique (A17 : IPC et emploi américains, décisions de taux de la Fed et de la banque centrale de la devise de l'actif).
 
 Lecture seule. Les publications viennent de `earn_calendar` (page /resultats) quand l'actif y est suivi ; une base sans ces tables donne
-simplement les changements de champion.
+simplement les changements de champion. Les repères macro ont leur propre plafond : ils ne chassent pas ceux de l'actif.
 """
 from __future__ import annotations
 
 import sqlite3
 
+from patrick.data import econ_calendar
 from patrick.tracking import champion_history
 
 MAX_EVENTS = 60
+MAX_MACRO_EVENTS = 80
 
 
-def events(conn: sqlite3.Connection, symbol: str) -> list[dict]:
-    """`[{"date": "AAAA-MM-JJ", "kind": "champion" | "earnings", "label": str}]`, triés par date, au plus `MAX_EVENTS` (les plus récents)."""
+def events(conn: sqlite3.Connection, symbol: str, macro: bool = True) -> list[dict]:
+    """`[{"date": "AAAA-MM-JJ", "kind": "champion" | "earnings" | "macro", "label": str}]`, triés par date ; au plus `MAX_EVENTS` de l'actif
+    et `MAX_MACRO_EVENTS` repères macro (les plus récents)."""
+    own = _own_events(conn, symbol)
+    if not macro:
+        return own
+    extra = econ_calendar.chart_events(conn, symbol)[-MAX_MACRO_EVENTS:]
+    return sorted(own + extra, key=lambda e: (e["date"], e["kind"]))
+
+
+def _own_events(conn: sqlite3.Connection, symbol: str) -> list[dict]:
     out: list[dict] = []
     for horizon, reigns in champion_history.history(conn, symbol).items():
         for r in reigns:

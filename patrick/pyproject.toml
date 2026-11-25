@@ -47,6 +47,8 @@ deep = ["torch"]
 rl = ["torch", "gymnasium", "stable-baselines3"]
 # Lecture des anciens classeurs Excel (.xls), des pages HTML enregistrées en .xls et des tableurs LibreOffice (.ods) par `patrick.tabular`.
 imports = ["xlrd", "odfpy", "lxml"]
+# Questions en langage naturel sur un run (A27, `analysis/run_qa.py`) : SDK Claude, importé à l'usage seulement.
+llm = ["anthropic>=2.14,<3"]
 
 [project.scripts]
 patrick = "patrick.cli:app"

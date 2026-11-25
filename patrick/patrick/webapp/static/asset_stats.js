@@ -36,8 +36,10 @@
             title: (window.PatrickNames ? window.PatrickNames.label(symbol) : symbol), quoteTitle: false, initialDays: 365,
             quote: timed, trend: true, ranges: timed, height: 220, empty: tr("preview_no_data", "No data for this period."),
             ohlc: ohlc, volume: ohlc && data.volumes && data.volumes.some(function (v) { return v > 0; }) ? data.volumes : null,
-            // D3 : changements de champion (« C1 » = horizon 1 jour) et publications de résultats (« R »), repères verticaux datés
+            // D3 : changements de champion (« C1 » = horizon 1 jour) et publications de résultats (« R »), repères verticaux datés ;
+            // A17 : calendrier économique (« IPC », « Emploi », « Fed », « BCE »...) en pointillé plus discret
             vlines: timed ? (data.events || []).map(function (e) {
+                if (e.kind === "macro") return { x: P.parseDate(e.date), label: e.label, color: "--info", dash: [1, 4], minor: true };
                 return { x: P.parseDate(e.date), label: e.label, color: e.kind === "earnings" ? "--warn" : "--brand", dash: [2, 3] };
             }).filter(function (l) { return isFinite(l.x); }) : [],
         });

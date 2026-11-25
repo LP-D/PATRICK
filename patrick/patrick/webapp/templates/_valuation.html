@@ -1,0 +1,41 @@
+{# Fragment `/fragments/valuation/{symbol}` (A8, `analysis/valuation.py`) : multiples, DCF inversé, DCF à hypothèse explicite et sensibilité.
+   Données Yahoo du jour : affichage seulement, jamais une variable d'entraînement. #}
+{% from "_components.html" import metric, empty_state %}
+{% macro num(v, d=1) %}{% if v is none %}—{% else %}{{ ('%.' ~ d ~ 'f') | format(v) | replace('.', ',') }}{% endif %}{% endmacro %}
+{% macro pc(v, d=1) %}{% if v is none %}—{% else %}{{ v | pct(d) }}{% endif %}{% endmacro %}
+{% if not val %}
+{{ empty_state(t('val_unavailable')) }}
+{% else %}
+{% set m = val.multiples %}
+<h3>{{ t('val_multiples') }}</h3>
+<div class="metric-grid">
+{{ metric(t('val_pe_trailing'), num(m.pe_trailing), '', 'neutral') }}
+{{ metric(t('val_pe_forward'), num(m.pe_forward), '', 'neutral') }}
+{{ metric(t('val_ev_ebitda'), num(m.ev_ebitda), '', 'neutral') }}
+{{ metric(t('val_ev_sales'), num(m.ev_sales), '', 'neutral') }}
+{{ metric(t('val_price_book'), num(m.price_book), '', 'neutral') }}
+{{ metric(t('val_fcf_yield'), pc(m.fcf_yield), '', 'neutral') }}
+{{ metric(t('val_div_yield'), pc(m.dividend_yield), '', 'neutral') }}
+</div>
+{% if val.dcf %}{% set d = val.dcf %}
+<h3>DCF</h3>
+<p>{% if d.implied_growth is not none %}{{ t('val_implied', g=pc(d.implied_growth), n=d.years) }}{% else %}{{ t('val_implied_none') }}{% endif %}.</p>
+<p class="hint">{{ t('val_rate', r=pc(d.rate), rf=pc(d.rf), b=num(d.beta, 2), gt=pc(d.terminal, 0)) }}</p>
+<p>{{ t('val_dcf', g=pc(d.growth, 0), v=(num(d.value, 2) ~ ' ' ~ (val.currency or '')), u=pc(d.upside, 0)) }}</p>
+<form class="val-form" method="get" action="/fragments/valuation/{{ symbol | urlencode }}" data-lazy-form>
+  <label>{{ t('val_growth_label') }}
+    <select name="g">{% for gv in [-0.05, 0.0, 0.03, 0.05, 0.08, 0.10, 0.15, 0.20] %}<option value="{{ gv }}"{% if (gv - g) | abs < 0.0001 %} selected{% endif %}>{{ (gv * 100) | round | int }} %</option>{% endfor %}</select>
+  </label>
+</form>
+<div class="table-scroll">
+<table class="data-table">
+<caption class="hint">{{ t('val_grid') }}</caption>
+<thead><tr><th></th>{% for gg in d.grid_growths %}<th class="num pk-mono">{{ pc(gg, 0) }}</th>{% endfor %}</tr></thead>
+<tbody>{% for row in d.grid %}<tr><th class="pk-mono">{{ pc(d.grid_rates[loop.index0], 1) }}</th>{% for v in row %}<td class="num pk-mono">{{ num(v, 2) }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+</table>
+</div>
+{% else %}
+<p class="hint">{{ t('val_reason_' ~ val.dcf_reason) }}</p>
+{% endif %}
+<p class="hint">{{ t('val_source') }} {{ t('val_disclaimer') }}</p>
+{% endif %}

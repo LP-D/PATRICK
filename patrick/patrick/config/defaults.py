@@ -438,7 +438,8 @@ TECHNICAL_LOOKBACK_BOUNDS: dict[str, dict[str, int]] = {
 # ^GSPC run (docs/audits/audit-vitesse-2026-09-25.md). `features/vol_models.py`
 # still builds it when a STORED config asks for it (predict/explain of models
 # exported before that date).
-ALL_VOL_MODELS = ["egarch", "kalman", "heston_proxy", "vrp_proxy", "ar", "ma", "arma", "arima"]
+# A3 : "gjr", "aparch" et "har" proposés en option (hors des défauts : les empreintes des runs existants ne changent pas)
+ALL_VOL_MODELS = ["egarch", "kalman", "heston_proxy", "vrp_proxy", "ar", "ma", "arma", "arima", "gjr", "aparch", "har"]
 DEFAULT_VOL_MODELS = ["egarch", "kalman", "heston_proxy", "vrp_proxy"]
 
 # Open list of targets proposed by the web form ("what to predict?"), grouped

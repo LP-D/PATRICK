@@ -11,32 +11,32 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | # | Proposition | Statut |
 |---|---|---|
 | A1 | Prévision du niveau de volatilité (HAR, QLIKE) pour dimensionner les fonds | fait (lot 7 : `fund/vol_forecast.py`, HAR-RV jugé en QLIKE ; pilote `vol_model = har` ; S&P 500 réel : gain QLIKE +29,7 %) |
-| A2 | DCC-GARCH dans `tracking/covariance.py` | à faire |
-| A3 | Variables GJR / APARCH / HAR dans le ML (option hors empreinte) | à faire |
-| A4 | Variables texte (ton banques centrales / actualités) dans l'entraînement | à faire |
+| A2 | DCC-GARCH dans `tracking/covariance.py` | fait (lot 7b : estimateur `dcc` dans `tracking/covariance.py`, DCC(1,1) sur résidus GARCH, 750 séances) |
+| A3 | Variables GJR / APARCH / HAR dans le ML (option hors empreinte) | fait (lot 7b : `features/vol_models_extra.py`, modèles `gjr`, `aparch` et `har` estimés sur le train de chaque pli ; module à part pour ne pas toucher l'empreinte du cache de variables ; proposés dans le formulaire, hors des défauts : aucune empreinte de run ne change) |
+| A4 | Variables texte (ton banques centrales / actualités) dans l'entraînement | fait (lot 7b : `features/text_features.py`, drapeau `enable_text_features` : sentiment des nouvelles de la cible et ton des banques centrales, point-in-time ; refusé tant que la porte des 250 séances n'est pas franchie ; hors du hachage et de la clé du cache tant qu'il est faux ; apport à mesurer) |
 | A5 | Volatilité intrajournalière (Parkinson, Garman-Klass) | fait (lot 7 : variance de Garman-Klass ramenée à l'échelle clôture à clôture, dans la prévision HAR) |
-| A6 | Carry trade | à faire |
+| A6 | Carry trade | déjà fait (ADR 0015 : carry de change mesuré sur 7 devises 2000-2025, Sharpe 0,17-0,18, Sharpe déflaté 0,64 ; non adopté, à rouvrir sur un fait nouveau) |
 | A7 | Cible alpha contre l'indice de référence | déjà fait (`features/alpha_target.py`, cibles `target_kind = alpha` contre un indice de référence) |
-| A8 | Valorisation d'entreprise (multiples, puis DCF) | à faire |
-| A9 | Dimensionnement par bandit après frais | à faire |
+| A8 | Valorisation d'entreprise (multiples, puis DCF) | fait (lot 7b : `analysis/valuation.py`, section « Valorisation » de la fiche des actions : multiples, DCF inversé, DCF à hypothèse choisie et table de sensibilité ; taux sans risque de la devise ; données Yahoo du jour, jamais en entraînement) |
+| A9 | Dimensionnement par bandit après frais | déjà fait (ADR 0015 : bandit LinUCB et Kelly ridge mesurés après frais sur 459 champions ; moins bons que le seuil fixe, non adoptés) |
 | A10 | RL : A2C / SAC / DQN comparés à PPO | à faire |
-| A11 | Brancher `research/phase9.py` sur les fonds | à faire |
+| A11 | Brancher `research/phase9.py` sur les fonds | fait en partie (lot 7b : `fund/regime.py`, régime de marché de phase9 (VIX, S&P 500) affiché sur /fonds avec ses déclencheurs ; pas de modulation de l'exposition, non mesurée) |
 | A12 | Ordres limite et exécutions partielles | à faire |
 | A13 | Ordres manuels sur un fonds | déjà fait (saisie d'un ordre ou d'une position à la main : « Nouvelle position », `/api/fund/strategies/{id}/orders`) ; « 0 ordre manuel » était un constat d'usage |
 | A14 | Reprise d'un run au niveau du scan | à faire |
 | A15 | Notifications Windows | fait (lot 7 : notification Windows de fin de nuit s'il y a quelque chose à signaler, préférence `notify_night`) |
-| A16 | Rapport hebdomadaire PDF | à faire |
-| A17 | Calendrier économique superposé aux cours | à faire |
+| A16 | Rapport hebdomadaire PDF | fait (lot 7b : `core/text_pdf.py`, PDF sans dépendance ; lien PDF à côté de chaque rapport sur /sante) |
+| A17 | Calendrier économique superposé aux cours | fait (lot 7b : `data/econ_calendar.py`, migration 0058 : dates FRED d'IPC, emploi, PIB, PCE, ventes (passées et à venir) rafraîchies avec les nouvelles ; décisions Fed/BCE/BoE/BoC lues dans les titres des communiqués ; repères sur la courbe de chaque actif, agenda sur /news) |
 | A18 | Bai-Perron et ARFIMA exact | fait en partie (lot 7 : Bai-Perron et d de Whittle local dans l'étude « racine unitaire ») ; ARFIMA exact par maximum de vraisemblance non fait |
 | A19 | EVT pour la VaR des fonds | fait (lot 7 : VaR et ES à 99 % par loi de Pareto généralisée, panneau d'un fonds) |
 | A20 | PBO sur /strategies | fait (lot 7 : PBO de la grille de réglages du laboratoire) |
 | A21 | Pipeline complet sur marches aléatoires | déjà fait (`tests/pipeline/test_null_world_validity.py`, `validity.yml` hebdomadaire) |
 | A22 | Ablation de Kalman (runs appariés) | à toi (runs du worker ; protocole ADR 0009) |
 | A23 | Monte-Carlo sur /placements | déjà fait (`placements/projection.py` : milliers de trajectoires par bootstrap par blocs, quantiles et distribution) |
-| A24 | Import de relevés de courtier (CSV) | à faire |
+| A24 | Import de relevés de courtier (CSV) | déjà fait (`wealth/importer.py` : import CSV tolérant des relevés de courtier, glisser-déposer sur /patrimoine et /mouvements) |
 | A25 | Export Excel en un clic | fait (lot 7 : `/api/export/patrick.xlsx`, liens sur /predictions et /fonds) |
 | A26 | Page vitrine d'un fonds (HTML sans données personnelles) | fait (lot 7 : page vitrine HTML autonome, pourcentages seulement) |
-| A27 | Questions en langage naturel sur un run (`llm_guard`) | à faire |
+| A27 | Questions en langage naturel sur un run (`llm_guard`) | fait (lot 7b : `analysis/run_qa.py`, carte « Questions sur ce run » : Claude Opus 5.5 répond depuis les seuls chiffres du run, avertissement de fuite par `llm_guard` (part des dates évaluées après sa limite de connaissance) ; extra `llm`, SDK installé dans le .venv ; clé API à fournir par Léon) |
 | A28 | Comparaisons limitées à un même profil | fait (lot 7 : l'onglet « Comparer » restreint la liste à la cible ; la comparaison signalait déjà des profils différents) |
 | A29 | Test de restauration automatique de la sauvegarde | fait (lot 7 : `patrick storage verify-backup`, étape de nuit ; vraie sauvegarde du 24/11 restaurable, 116 s) |
 | A30 | Parité de risque pour les fonds combinés | fait (lot 7 : `fund/risk_parity.py`, pilote `weighting = risk_parity`) |

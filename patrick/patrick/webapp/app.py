@@ -2276,6 +2276,35 @@ def vol_forecast_fragment(request: Request, symbol: str):
     return templates.TemplateResponse(request, "_vol_forecast.html", {**_i18n_context(request), "vf": out})
 
 
+_VALUATION_CACHE: dict[str, tuple[float, dict]] = {}
+_VALUATION_TTL_S = 6 * 3600
+
+
+@app.get("/fragments/valuation/{symbol}")
+def valuation_fragment(request: Request, symbol: str, g: float = 0.05):
+    """Valorisation d'une action (A8) : multiples, DCF inversé (croissance que le prix suppose) et DCF à hypothèse explicite `g`
+    (croissance annuelle du FCF sur 10 ans, bornée à [-20 % ; 30 %]) avec sa table de sensibilité. Données yfinance gardées 6 h."""
+    import time as _time
+
+    from patrick.analysis import valuation
+    if forms.TARGET_SOURCE_BY_SYMBOL.get(symbol) != "yfinance":
+        raise HTTPException(status_code=404, detail="Cible inconnue")
+    g = min(max(g, -0.20), 0.30)
+    now = _time.monotonic()
+    cached = _VALUATION_CACHE.get(symbol)
+    if cached is None or now - cached[0] > _VALUATION_TTL_S:
+        info = valuation.load_info(symbol)
+        try:
+            rf = valuation.risk_free(info.get("currency"))
+        except Exception:  # noqa: BLE001 -- frontière fournisseur : le taux sans risque par défaut prend le relais
+            rf = None
+        cached = (now, {"info": info, "rf": rf})
+        _VALUATION_CACHE[symbol] = cached
+    data = cached[1]
+    out = valuation.analyse(data["info"], rf=data["rf"], growth=g) if data["info"] else None
+    return templates.TemplateResponse(request, "_valuation.html", {**_i18n_context(request), "val": out, "symbol": symbol, "g": g})
+
+
 @app.get("/fragments/pooled-heatmap")
 def pooled_heatmap_fragment(request: Request):
     """Carte de chaleur cible x horizon de l'AUC regroupée (D10), sur la Synthèse : où est le signal, en un coup d'oeil."""

@@ -33,7 +33,7 @@ ARTIFACT_BASE_ENV = "PATRICK_ARTIFACT_BASE"
 
 # (famille, motif sur ce qui suit le nom de la série). Ordre = priorité.
 _FAMILIES: list[tuple[str, re.Pattern]] = [
-    ("volatility_model", re.compile(r"^(egarch_vol|kalman\w*|hmm\w*|heston\w*|vrp\w*|particle_vol|ar_resid|ma_resid|arma_resid|arima_resid)$")),
+    ("volatility_model", re.compile(r"^(egarch_vol|gjr_vol|aparch_vol|har_vol|kalman\w*|hmm\w*|heston\w*|vrp\w*|particle_vol|ar_resid|ma_resid|arma_resid|arima_resid)$")),
     ("long_cycle", re.compile(r"^lc_\w+$")),
     ("spike", re.compile(r"^(hurst\w*|semivar\w*|skew\w*|kurt\w*|jump\w*|spike\w*)$")),
     ("technical", re.compile(r"^(ret_\w+|zscore_\w+|rsi_\w+|macd\w*|bb_\w+|vs_ma\w*|ma_\w+|vol_\w+|pk_\w+|gk_\w+|rs_\w+|yz_\w+|roc_\w+|atr_\w+)$")),

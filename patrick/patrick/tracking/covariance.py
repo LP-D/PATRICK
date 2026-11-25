@@ -21,7 +21,8 @@ import pandas as pd
 
 from patrick.features._utils import safe_pct_change
 
-COVARIANCE_ESTIMATORS = ("sample", "ledoit_wolf")
+COVARIANCE_ESTIMATORS = ("sample", "ledoit_wolf", "dcc")
+DCC_LOOKBACK = 750               # le GARCH puis le DCC ont besoin de plus d'un an d'historique (`tracking/dcc.py`, A2)
 
 
 def point_in_time_covariance(prices: dict[str, pd.Series], as_of,
@@ -44,15 +45,17 @@ def point_in_time_covariance(prices: dict[str, pd.Series], as_of,
     (Ledoit & Wolf 2004 : combinaison convexe de la covariance empirique et
     d'une cible diagonale a variance moyenne, intensite de retrecissement
     estimee pour minimiser l'erreur quadratique attendue ; toujours definie
-    positive). L'intensite est exposee dans `result.attrs["shrinkage"]`."""
+    positive). L'intensite est exposee dans `result.attrs["shrinkage"]`. `"dcc"` (A2) : covariance PRÉVUE pour le lendemain par un
+    DCC-GARCH (`tracking/dcc.py`), sur au moins `DCC_LOOKBACK` observations ; paramètres dans `result.attrs["dcc"]`."""
     if estimator not in COVARIANCE_ESTIMATORS:
         raise ValueError(f"estimateur de covariance inconnu : {estimator!r} ({COVARIANCE_ESTIMATORS})")
     as_of = pd.Timestamp(as_of)
     returns: dict[str, pd.Series] = {}
+    window = max(lookback or 0, DCC_LOOKBACK) if estimator == "dcc" else lookback
     for symbol, series in prices.items():
         truncated = series[series.index <= as_of]
         ret = safe_pct_change(truncated).dropna()
-        returns[symbol] = ret.iloc[-lookback:] if lookback else ret
+        returns[symbol] = ret.iloc[-window:] if window else ret
 
     aligned = pd.DataFrame(returns).dropna(how="any")  # inner join implicite sur l'index
     if len(aligned) < min_obs:
@@ -62,7 +65,11 @@ def point_in_time_covariance(prices: dict[str, pd.Series], as_of,
         )
 
     symbols = list(prices.keys())
-    if estimator == "ledoit_wolf":
+    if estimator == "dcc":
+        from patrick.tracking import dcc
+        cov, params = dcc.dcc_covariance(aligned[symbols])
+        cov.attrs.update({"shrinkage": 0.0, "dcc": params})
+    elif estimator == "ledoit_wolf":
         from sklearn.covariance import LedoitWolf
 
         lw = LedoitWolf().fit(aligned[symbols].values)

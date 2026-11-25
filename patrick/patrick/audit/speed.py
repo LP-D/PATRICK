@@ -32,6 +32,8 @@ _FAMILY_PATTERNS: tuple[tuple[str, str], ...] = (
     ("long_cycle", r"_lc_"),
     ("particle_filter", r"_particle_vol$"),
     ("egarch", r"_egarch_vol$"),
+    ("arch_family", r"_(gjr|aparch)_vol$"),
+    ("har", r"_har_vol$"),
     ("kalman", r"_kalman_filtered$"),
     ("hmm", r"_hmm_filtered_stress_prob$"),
     ("heston_proxy", r"_heston_(theta|spread)(_\d+_\d+d)?$"),
@@ -44,7 +46,7 @@ _FAMILY_PATTERNS: tuple[tuple[str, str], ...] = (
 )
 
 # Families whose build fits a model (re-fit per walk-forward fold).
-PARAMETRIC_FAMILIES = frozenset({"particle_filter", "egarch", "kalman", "hmm", "arima_family"})
+PARAMETRIC_FAMILIES = frozenset({"particle_filter", "egarch", "arch_family", "har", "kalman", "hmm", "arima_family"})
 
 
 def classify_feature(name: str) -> str:
