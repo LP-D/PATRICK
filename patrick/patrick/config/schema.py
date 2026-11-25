@@ -189,6 +189,11 @@ class FeaturesConfig(BaseModel):
     # The schema default is False so that a run stored before this field is replayed (predict/explain/resume) with exactly the
     # columns it was trained on; every NEW run (web form, launch batches) sets it to `D.DEFAULT_ENABLE_EQUITY_CONTEXT_FEATURES`.
     enable_equity_context_features: bool = False
+    # A4 (2026-11-25) : variables texte point-in-time (`features/text_features.py`) -- sentiment des nouvelles rattachées à la cible et ton
+    # des banques centrales, agrégés par séance sans information postérieure. Refusé tant que l'historique de nouvelles est trop court
+    # (`text/readiness.py` : 250 séances, 60 jours avec nouvelles). Faux par défaut et hors du hachage tant qu'il est faux : aucun run
+    # existant ne change d'identité.
+    enable_text_features: bool = False
     technical_lookbacks: TechnicalLookbacksConfig = Field(default_factory=TechnicalLookbacksConfig)
 
 

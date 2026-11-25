@@ -12,8 +12,8 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 |---|---|---|
 | A1 | Prévision du niveau de volatilité (HAR, QLIKE) pour dimensionner les fonds | fait (lot 7 : `fund/vol_forecast.py`, HAR-RV jugé en QLIKE ; pilote `vol_model = har` ; S&P 500 réel : gain QLIKE +29,7 %) |
 | A2 | DCC-GARCH dans `tracking/covariance.py` | fait (lot 7b : estimateur `dcc` dans `tracking/covariance.py`, DCC(1,1) sur résidus GARCH, 750 séances) |
-| A3 | Variables GJR / APARCH / HAR dans le ML (option hors empreinte) | fait (lot 7b : modèles de volatilité `gjr`, `aparch` et `har` dans `features/vol_models.py`, estimés sur le train de chaque pli ; proposés dans le formulaire, hors des défauts : aucune empreinte de run ne change) |
-| A4 | Variables texte (ton banques centrales / actualités) dans l'entraînement | à faire |
+| A3 | Variables GJR / APARCH / HAR dans le ML (option hors empreinte) | fait (lot 7b : `features/vol_models_extra.py`, modèles `gjr`, `aparch` et `har` estimés sur le train de chaque pli ; module à part pour ne pas toucher l'empreinte du cache de variables ; proposés dans le formulaire, hors des défauts : aucune empreinte de run ne change) |
+| A4 | Variables texte (ton banques centrales / actualités) dans l'entraînement | fait (lot 7b : `features/text_features.py`, drapeau `enable_text_features` : sentiment des nouvelles de la cible et ton des banques centrales, point-in-time ; refusé tant que la porte des 250 séances n'est pas franchie ; hors du hachage et de la clé du cache tant qu'il est faux ; apport à mesurer) |
 | A5 | Volatilité intrajournalière (Parkinson, Garman-Klass) | fait (lot 7 : variance de Garman-Klass ramenée à l'échelle clôture à clôture, dans la prévision HAR) |
 | A6 | Carry trade | déjà fait (ADR 0015 : carry de change mesuré sur 7 devises 2000-2025, Sharpe 0,17-0,18, Sharpe déflaté 0,64 ; non adopté, à rouvrir sur un fait nouveau) |
 | A7 | Cible alpha contre l'indice de référence | déjà fait (`features/alpha_target.py`, cibles `target_kind = alpha` contre un indice de référence) |

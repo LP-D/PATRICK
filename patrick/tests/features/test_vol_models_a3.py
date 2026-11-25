@@ -7,6 +7,7 @@ import pytest
 
 from patrick.config import defaults as D
 from patrick.features import vol_models as vm
+from patrick.features import vol_models_extra as vx
 from patrick.webapp import forms
 
 
@@ -46,7 +47,7 @@ def test_outputs_are_positive_daily_volatilities(model):
 
 def test_har_tracks_volatility_better_than_a_constant():
     px = _prices(1500)
-    har = vm.har_vol(px, fit_end_idx=1000)
+    har = vx.har_vol(px, fit_end_idx=1000)
     nxt = (px.pct_change() ** 2).shift(-1)
     test = slice(1000, 1490)
     mse_har = float(((har.iloc[test] ** 2 - nxt.iloc[test]) ** 2).mean())
@@ -58,3 +59,17 @@ def test_new_models_are_offered_but_not_default():
     assert {"gjr", "aparch", "har"} <= set(D.ALL_VOL_MODELS) <= set(forms.VOL_MODEL_LABELS)
     assert not {"gjr", "aparch", "har"} & set(D.DEFAULT_VOL_MODELS)
     assert {"gjr", "aparch", "har"} <= vm.PARAMETRIC_VOL_MODELS
+
+
+def test_the_feature_code_hash_and_existing_cache_keys_do_not_move():
+    """`vol_models.py` reste intact (empreinte du cache) ; une configuration sans les nouveaux modèles garde exactement sa clé."""
+    from patrick.config.schema import RunConfig
+    from patrick.features import pool_cache
+    from patrick.pipeline import engine
+
+    assert "vol_models_extra.py" not in pool_cache._FEATURE_SOURCES
+    base = RunConfig.model_validate({"objective": {"target_symbol": "^VIX"}})
+    payload = engine._features_payload(base)
+    assert "vol_extra_code" not in payload and "enable_text_features" not in payload["features"]
+    with_gjr = RunConfig.model_validate({"objective": {"target_symbol": "^VIX"}, "features": {"vol_models": ["egarch", "gjr"]}})
+    assert engine._features_payload(with_gjr)["vol_extra_code"] == vx.CODE_HASH

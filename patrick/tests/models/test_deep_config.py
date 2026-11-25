@@ -28,7 +28,7 @@ def test_a_machine_learning_config_hash_never_sees_the_deep_block(monkeypatch):
     # et la charge utile est exactement celle d'une configuration d'avant : la sortie complète privée de la seule clé « deep »
     assert payload == base.model_dump_json(exclude={"models": {"deep"},
                                                     "validation": {"method_version", "drop_stale_returns", "cpcv_thresholds_per_combo"},
-                                                    "features": {"enable_equity_context_features"},
+                                                    "features": {"enable_equity_context_features", "enable_text_features"},
                                                     "objective": {"benchmark", "benchmark_source", "target_kind",
                                                                   "leak_guard", "alignment", "session_rule", "task"}}).encode()
 

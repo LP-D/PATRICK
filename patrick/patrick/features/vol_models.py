@@ -149,59 +149,6 @@ def egarch_conditional_vol(series: pd.Series, p: int = 1, o: int = 1, q: int = 1
         return pd.Series(np.nan, index=series.index, name="egarch_vol")
 
 
-def _arch_family_vol(series: pd.Series, vol: str, name: str, fit_end_idx: int | None, test_end_idx: int | None) -> pd.Series:
-    """Volatilité conditionnelle GJR-GARCH(1,1,1) ou APARCH(1,1,1) (A3) : même protocole anti-fuite que `egarch_conditional_vol`
-    (paramètres estimés sur le train du pli, partie train reprise du fit train seul, partie test par `.fix()` sur une série tronquée à la
-    fin du pli). GJR : effet de levier (une baisse augmente plus la variance qu'une hausse) ; APARCH : levier et puissance estimée."""
-    from arch import arch_model
-
-    ret = (safe_pct_change(series).dropna() * 100)
-    cutoff = _fit_cutoff_date(series, fit_end_idx)
-    fit_ret = ret[ret.index < cutoff] if cutoff is not None else ret
-    try:
-        res = arch_model(fit_ret, vol=vol, p=1, o=1, q=1, dist="normal").fit(disp="off")
-        if cutoff is None:
-            return (res.conditional_volatility / 100).reindex(series.index).rename(name)
-        ret_for_fix = ret
-        if test_end_idx is not None:
-            ret_for_fix = ret[ret.index <= series.index[min(test_end_idx, len(series) - 1)]]
-        cv = arch_model(ret_for_fix, vol=vol, p=1, o=1, q=1, dist="normal").fix(res.params).conditional_volatility.copy()
-        cv.loc[res.conditional_volatility.index] = res.conditional_volatility.values
-        return (cv / 100).reindex(series.index).rename(name)
-    except Exception as e:  # noqa: BLE001 -- arch raises arbitrary numerical errors on degenerate series; feature -> NaN
-        print(f"  [WARN] {vol}: {str(e)[:100]}")
-        return pd.Series(np.nan, index=series.index, name=name)
-
-
-def gjr_conditional_vol(series: pd.Series, fit_end_idx: int | None = None, test_end_idx: int | None = None) -> pd.Series:
-    return _arch_family_vol(series, "GARCH", "gjr_vol", fit_end_idx, test_end_idx)
-
-
-def aparch_conditional_vol(series: pd.Series, fit_end_idx: int | None = None, test_end_idx: int | None = None) -> pd.Series:
-    return _arch_family_vol(series, "APARCH", "aparch_vol", fit_end_idx, test_end_idx)
-
-
-def har_vol(series: pd.Series, fit_end_idx: int | None = None) -> pd.Series:
-    """Volatilité du lendemain prévue par HAR-RV (Corsi 2009, A3) sur les rendements au carré : RV(t+1) = b0 + b1 RV(t) + b2 RV
-    moyenne 5 j + b3 RV moyenne 22 j. Coefficients estimés par moindres carrés sur les seules lignes dont la CIBLE (le lendemain) tombe
-    avant la coupure du pli, puis appliqués à toute la série : la valeur au jour t n'utilise que des rendements jusqu'à t."""
-    ret = safe_pct_change(series)
-    rv = ret * ret
-    X = pd.concat({"d": rv, "w": rv.rolling(5).mean(), "m": rv.rolling(22).mean()}, axis=1)
-    y = rv.shift(-1)
-    cutoff = _fit_cutoff_date(series, fit_end_idx)
-    target_day = pd.Series(series.index, index=series.index).shift(-1)
-    rows = X.notna().all(axis=1) & y.notna()
-    if cutoff is not None:
-        rows &= target_day < cutoff
-    if rows.sum() < 60:
-        return pd.Series(np.nan, index=series.index, name="har_vol")
-    A = np.column_stack([np.ones(int(rows.sum())), X[rows].to_numpy()])
-    beta, *_ = np.linalg.lstsq(A, y[rows].to_numpy(), rcond=None)
-    pred = beta[0] + X.to_numpy() @ beta[1:]
-    return pd.Series(np.sqrt(np.clip(pred, 1e-12, None)), index=series.index, name="har_vol").where(X.notna().all(axis=1))
-
-
 def kalman_filtered_level(series: pd.Series, fit_end_idx: int | None = None) -> pd.Series:
     """Level filtered (not smoothed) by a local-level Kalman filter: pykalman's
     `.filter()` is the causal forward pass (unlike `.smooth()`). Both
@@ -385,10 +332,6 @@ _PARAMETRIC_MODELS = {
     "ma": lambda s, fit_end_idx, test_end_idx: ma_resid(s, fit_end_idx=fit_end_idx).to_frame(),
     "arma": lambda s, fit_end_idx, test_end_idx: arma_resid(s, fit_end_idx=fit_end_idx).to_frame(),
     "arima": lambda s, fit_end_idx, test_end_idx: arima_resid(s, fit_end_idx=fit_end_idx).to_frame(),
-    # A3 (2026-11-25) : levier et mémoire hétérogène ; hors de `DEFAULT_VOL_MODELS`, donc aucune empreinte de run existante ne change
-    "gjr": lambda s, fit_end_idx, test_end_idx: gjr_conditional_vol(s, fit_end_idx=fit_end_idx, test_end_idx=test_end_idx).to_frame(),
-    "aparch": lambda s, fit_end_idx, test_end_idx: aparch_conditional_vol(s, fit_end_idx=fit_end_idx, test_end_idx=test_end_idx).to_frame(),
-    "har": lambda s, fit_end_idx, test_end_idx: har_vol(s, fit_end_idx=fit_end_idx).to_frame(),
 }
 # Pure rolling windows — no global parameter, `fit_end_idx`/`test_end_idx` ignored.
 _NONPARAMETRIC_MODELS = {
@@ -414,9 +357,6 @@ _MODEL_OUTPUT_COLUMN = {
     "ma": "ma_resid",
     "arma": "arma_resid",
     "arima": "arima_resid",
-    "gjr": "gjr_vol",
-    "aparch": "aparch_vol",
-    "har": "har_vol",
 }
 
 
