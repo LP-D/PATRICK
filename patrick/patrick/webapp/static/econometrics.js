@@ -132,6 +132,15 @@
         var vr = renderVarianceRatio(res.variance_ratio);
         if (vr) box.appendChild(vr);
         if (res.hurst && res.hurst.value !== null) box.appendChild(line([fmtStr(tr("eco_hurst"), { h: num(res.hurst.value, 2) }), res.hurst.label ? tr("eco_hurst_" + res.hurst.label) : null]));
+        var bp = res.bai_perron;                                       // A18 : ruptures multiples de moyenne (Bai-Perron, BIC)
+        if (bp && !bp.error) {
+            box.appendChild(h("h3", { text: tr("eco_bp_title") }));
+            box.appendChild(note(tr("eco_bp_note")));
+            box.appendChild(table([tr("eco_bp_from"), tr("eco_bp_to"), tr("eco_bp_mean"), "n"],
+                bp.segments.map(function (sg) { return [sg.start, sg.end, numCell(num(sg.mean, 5), sg.mean), { cell: sg.n, cls: "num" }]; })));
+        } else if (bp) { box.appendChild(note(bp.error)); }
+        var wh = res.whittle;
+        if (wh && !wh.error) box.appendChild(line([fmtStr(tr("eco_whittle"), { d: num(wh.d, 2), se: num(wh.se, 2), m: wh.m }), wh.label]));
         box.appendChild(line([fmtStr(tr("eco_obs"), { n: ur.n_obs })]));
         return box;
     }

@@ -68,6 +68,12 @@ ECONOMETRICS_STRINGS: dict[str, dict[str, str]] = {
     "eco_vr_title": _s("Ratio de variance", "Variance ratio"),
     "eco_vr_q": _s("Horizon", "Horizon"), "eco_vr_ratio": _s("Ratio", "Ratio"), "eco_vr_z": _s("z robuste", "Robust z"),
     "eco_hurst": _s("Exposant de Hurst : {h}", "Hurst exponent: {h}"),
+    "eco_bp_title": _s("Ruptures multiples de la moyenne (Bai-Perron)", "Multiple breaks in the mean (Bai-Perron)"),
+    "eco_bp_note": _s("Segmentation optimale (moindres carrés, programmation dynamique), segments d'au moins 15 % de l'échantillon, nombre de ruptures choisi au BIC.", "Optimal segmentation (least squares, dynamic programming), segments of at least 15% of the sample, number of breaks chosen by BIC."),
+    "eco_bp_from": _s("Du", "From"),
+    "eco_bp_to": _s("Au", "To"),
+    "eco_bp_mean": _s("Moyenne", "Mean"),
+    "eco_whittle": _s("Mémoire longue (Whittle local) : d = {d} (erreur-type {se}, {m} fréquences)", "Long memory (local Whittle): d = {d} (standard error {se}, {m} frequencies)"),
     "eco_hurst_random_walk": _s("marche aléatoire", "random walk"), "eco_hurst_trending": _s("tendance persistante", "persistent trend"),
     "eco_hurst_mean_reverting": _s("retour à la moyenne", "mean reversion"),
 
