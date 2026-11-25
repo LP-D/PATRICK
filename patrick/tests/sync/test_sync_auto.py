@@ -447,3 +447,16 @@ def test_the_funds_stage_upgrades_an_older_database_by_itself(pcs):
 
     assert any(a.startswith("fonds publiés") for a in out["actions"]), out
     assert _funds(pc1) == {sid: "Déjà là"}
+
+
+def test_auto_command_reports_a_missing_share_drive_as_postponed_not_failed(tmp_path):
+    """CO23 (25/11) : le lecteur du partage absent (Google Drive arrêté) faisait échouer l'étape de nuit ; c'est un report."""
+    from typer.testing import CliRunner
+
+    from patrick.cli import app as cli_app
+
+    missing = tmp_path / "F" / "PATRICK"
+    log = tmp_path / "sync.log"
+    result = CliRunner().invoke(cli_app, ["sync", "auto", "--folder", str(missing), "--log-file", str(log)])
+    assert result.exit_code == 0, result.output
+    assert "dossier de partage introuvable" in result.output and "dossier de partage introuvable" in log.read_text(encoding="utf-8")

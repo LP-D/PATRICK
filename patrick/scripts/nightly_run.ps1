@@ -31,6 +31,7 @@ param(
     [int]$IdleMinutes = 10,
     [int]$NetworkWaitMinutes = 5,
     [string]$LogFile = "",
+    [int]$RotateMB = 300,
     [switch]$DryRun
 )
 
@@ -42,6 +43,29 @@ $Python     = if (Test-Path $VenvPython) { $VenvPython } else { (Get-Command pyt
 Set-Location $RepoDir
 $LogDir = Split-Path -Parent $LogFile
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir | Out-Null }
+
+# Rotation du journal (AM23 du 25/11) : au-dela de -RotateMB Mo (300), le journal courant est compresse en nightly-AAAAMMJJ-HHmm.log.gz
+# avant la nuit et un nouveau commence ; les 4 dernieres archives sont gardees. Le journal pesait 2,8 Go le 25/11 (une ligne par prediction).
+# La page Sante lit la fin du journal courant : la nuit qui commence y est entiere.
+function Rotate-Log {
+    if ($RotateMB -le 0 -or -not (Test-Path $LogFile) -or (Get-Item $LogFile).Length -lt ($RotateMB * 1MB)) { return }
+    $archive = Join-Path $LogDir ("nightly-{0:yyyyMMdd-HHmm}.log.gz" -f (Get-Date))
+    try {
+        $in = [System.IO.File]::OpenRead($LogFile)
+        try {
+            $out = [System.IO.File]::Create($archive)
+            try {
+                $gz = New-Object System.IO.Compression.GZipStream($out, [System.IO.Compression.CompressionMode]::Compress)
+                try { $in.CopyTo($gz) } finally { $gz.Dispose() }
+            } finally { $out.Dispose() }
+        } finally { $in.Dispose() }
+        Remove-Item -LiteralPath $LogFile
+        Get-ChildItem -Path $LogDir -Filter "nightly-*.log.gz" | Sort-Object Name -Descending | Select-Object -Skip 4 | Remove-Item -ErrorAction SilentlyContinue
+    } catch {
+        if (Test-Path $archive) { Remove-Item -LiteralPath $archive -ErrorAction SilentlyContinue }
+    }
+}
+if (-not $DryRun) { Rotate-Log }
 
 function Log([string]$message) {
     $line = "{0:yyyy-MM-dd HH:mm:ss} {1}" -f (Get-Date), $message
@@ -130,6 +154,9 @@ Step "verification de la sauvegarde" @("-m", "patrick.cli", "storage", "verify-b
 Step "signaux regroupes" @("-m", "patrick.cli", "audit", "signal")
 Step "synchronisation" @("-m", "patrick.cli", "sync", "auto")
 Step "autres predictions" @($Predict, "--base-dir", $RepoDir, "--log-file", $PredictLog, "--skip-funds")
+# Re-entrainement automatique des runs conseilles (FO9 du 25/11), dans le budget hebdomadaire `auto_retrain_per_week` (0 par defaut :
+# ne fait rien). En dernier : les jobs partent apres les predictions, jamais en concurrence avec elles.
+Step "reentrainement automatique" @("-m", "patrick.cli", "retrain", "auto")
 
 if (-not $DryRun) { & $Python -m patrick.cli notify-night *>> $LogFile }     # resume Windows seulement s'il y a quelque chose a signaler (A15)
 if ($End -eq "none") { Log "== fin : aucune extinction demandee"; return }

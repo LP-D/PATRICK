@@ -1193,6 +1193,18 @@ async def reorder_queued_jobs(request: Request):
     return {"queue": run_manager.reorder_queued_runs(order)}
 
 
+@app.post("/api/queue/sort-urgency")
+def sort_queue_by_urgency():
+    """AM9 (25/11) : range la file par urgence (paires sans champion, puis champions les plus anciens) ; renvoie la file rangée."""
+    from patrick.tracking import queue_urgency
+    conn = trackdb.connect()
+    try:
+        order = queue_urgency.sorted_queue(conn)
+    finally:
+        conn.close()
+    return {"queue": run_manager.reorder_queued_runs(order)}
+
+
 @app.delete("/api/queue")
 def clear_queued_jobs():
     return {"removed": run_manager.clear_queued_runs()}

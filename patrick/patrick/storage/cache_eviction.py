@@ -24,6 +24,11 @@ DEFAULT_FEATURE_CACHE_MAX_GB = 150.0
 KEY_VOL_CACHE_KEEP_DAYS = "vol_cache_keep_days"
 DEFAULT_VOL_CACHE_KEEP_DAYS = 3      # 04/11/2026 : 751 678 entrées en 11 jours (base de 69 Go) quand rien ne les retirait
 MIN_AGE_S = 3600                    # un fichier écrit ou lu depuis moins d'une heure peut servir à un run en cours : jamais évincé
+# AM7 (25/11) : un pool cher à recalculer « paraît » plus récent qu'il ne l'est : chaque seconde de calcul vaut COST_BONUS_S secondes
+# d'ancienneté en moins, plafonnées à COST_BONUS_MAX_S. Une minute de calcul garde le fichier 4 h de plus qu'un pool gratuit lu au
+# même moment ; un pool de dix minutes, 40 h. Sans fichier `.cost` (anciens fichiers) : l'ordre reste celui de la dernière lecture.
+COST_BONUS_S = 240.0
+COST_BONUS_MAX_S = 40 * 3600.0
 DB_CACHE_TABLES = ("vol_model_cache", "shap_selection_cache")
 
 
@@ -44,14 +49,22 @@ def vol_cache_keep_days() -> int:
         return DEFAULT_VOL_CACHE_KEEP_DAYS
 
 
+def _cost_s(path: Path) -> float:
+    try:
+        return max(0.0, float(path.with_suffix(".cost").read_text(encoding="ascii")))
+    except (OSError, ValueError):
+        return 0.0
+
+
 def _cache_files(root: Path) -> list[tuple[float, int, Path]]:
+    """(date effective, taille, chemin) : la date de dernière lecture, rajeunie selon le coût du calcul (voir `COST_BONUS_S`)."""
     out = []
     for path in root.rglob("*.parquet"):
         try:
             st = path.stat()
         except OSError:
             continue
-        out.append((st.st_mtime, st.st_size, path))
+        out.append((st.st_mtime + min(COST_BONUS_MAX_S, COST_BONUS_S * _cost_s(path)), st.st_size, path))
     return out
 
 
@@ -67,16 +80,20 @@ def evict_feature_cache(max_bytes: int | None = None, root: Path | None = None, 
     files = sorted(_cache_files(root))
     total = sum(size for _, size, _ in files)
     out.update(files=len(files), bytes=total)
-    for mtime, size, path in files:
+    for effective, size, path in files:
         if total <= cap:
             break
-        if now - mtime < MIN_AGE_S:
+        try:
+            if now - path.stat().st_mtime < MIN_AGE_S:      # la vraie date de lecture, pas la date rajeunie par le coût
+                continue
+        except OSError:
             continue
         if not dry_run:
             try:
                 path.unlink()
             except OSError:
                 continue
+            path.with_suffix(".cost").unlink(missing_ok=True)
         total -= size
         out["removed_files"] += 1
         out["removed_bytes"] += size

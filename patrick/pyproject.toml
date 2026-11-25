@@ -40,7 +40,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-timeout", "pytest-xdist", "hypothesis", "httpx", "ruff"]
+dev = ["pytest", "pytest-timeout", "pytest-xdist", "hypothesis", "httpx", "ruff", "cryptography>=42"]
 web = ["fastapi", "httpx", "uvicorn[standard]", "jinja2", "python-multipart"]
 # Pages Deep learning (/dl) et Reinforcement learning (/rl) : PyTorch, Gymnasium et Stable-Baselines3 ne sont importés qu'à l'usage.
 deep = ["torch"]
@@ -49,6 +49,8 @@ rl = ["torch", "gymnasium", "stable-baselines3"]
 imports = ["xlrd", "odfpy", "lxml"]
 # Questions en langage naturel sur un run (A27, `analysis/run_qa.py`) : SDK Claude, importé à l'usage seulement.
 llm = ["anthropic>=2.14,<3"]
+# Copie hors site chiffrée de la base (FO30, `patrick storage offsite`) : AES-256-GCM.
+backup = ["cryptography>=42"]
 
 [project.scripts]
 patrick = "patrick.cli:app"
