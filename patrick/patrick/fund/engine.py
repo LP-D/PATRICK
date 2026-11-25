@@ -288,7 +288,8 @@ def simulate(strategy: dict, orders: list[dict], market: MarketData, end=None) -
             if pos.status != "open" or pos.kind not in DERIV_KINDS or pos.last_order_day >= iso:
                 continue
             bar = market.bar_on(pos.symbol, day)
-            if bar is None or bar[["open", "high", "low"]].isna().any():
+            # tests scalaires : `bar[["open", "high", "low"]].isna().any()` indexait une Series par liste, ~1 ms par appel (B20)
+            if bar is None or pd.isna(bar["open"]) or pd.isna(bar["high"]) or pd.isna(bar["low"]):
                 continue
             hit = _trigger(pos, float(bar["open"]), float(bar["high"]), float(bar["low"]))
             if hit:

@@ -3,12 +3,28 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
-from patrick.tracking import db as trackdb
+# Filet de session (2026-11-25), posé AVANT tout import du code : un fil d'exécution lancé par un test (recalcul d'une vue en cache,
+# cycle du pilote des fonds) peut survivre à son test. À la fin du test, `monkeypatch` restaure les variables qu'il avait posées, et ce
+# fil ouvrait alors les VRAIES données : `~/.patrick/patrick.db` recevait les migrations de la branche testée (0054 à 0059 pendant le
+# chantier des 120 propositions) et un instantané de vue vide était écrit dans `~/.patrick/views`. Pour toute la session, ces chemins
+# pointent donc vers un dossier temporaire : sans fixture, c'est là qu'on écrit, jamais dans les données de la machine. Les fixtures
+# par test (`_isolated_database`...) gardent chacune leur dossier propre.
+_SESSION_ROOT = Path(tempfile.mkdtemp(prefix="patrick-tests-"))
+for _var, _sub in (("PATRICK_DB_PATH", "db/patrick.db"), ("PATRICK_SETTINGS_PATH", "settings.json"),
+                   ("PATRICK_DATA_ROOT", "data_root"), ("PATRICK_CACHE_ROOT", "local_cache"),
+                   ("PATRICK_FEATURE_CACHE_ROOT", "feature_cache"), ("PATRICK_FEATURE_CACHE_SHARED_ROOT", "feature_cache_shared"),
+                   ("PATRICK_STORE_ROOT", "store")):
+    os.environ[_var] = str(_SESSION_ROOT / _sub)
+(_SESSION_ROOT / "db").mkdir(parents=True, exist_ok=True)
+os.environ["PATRICK_NO_AUTO_WORKER"] = "1"
+
+from patrick.tracking import db as trackdb  # après le filet de session ci-dessus
 
 # Les tests sont rangés par domaine (`tests/fund/`, `tests/webapp/`...) mais certains réutilisent les aides d'un autre fichier de
 # test (`from test_fund_selection import World`). Chaque dossier de domaine est donc importable, quel que soit l'ordre dans lequel

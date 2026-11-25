@@ -19,7 +19,7 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | A7 | Cible alpha contre l'indice de référence | déjà fait (`features/alpha_target.py`, cibles `target_kind = alpha` contre un indice de référence) |
 | A8 | Valorisation d'entreprise (multiples, puis DCF) | fait (lot 7b : `analysis/valuation.py`, section « Valorisation » de la fiche des actions : multiples, DCF inversé, DCF à hypothèse choisie et table de sensibilité ; taux sans risque de la devise ; données Yahoo du jour, jamais en entraînement) |
 | A9 | Dimensionnement par bandit après frais | déjà fait (ADR 0015 : bandit LinUCB et Kelly ridge mesurés après frais sur 459 champions ; moins bons que le seuil fixe, non adoptés) |
-| A10 | RL : A2C / SAC / DQN comparés à PPO | à faire |
+| A10 | RL : A2C / SAC / DQN comparés à PPO | à toi (le moteur RL propose déjà PPO, A2C, DQN et SAC sur /rl ; la comparaison demande des runs du worker, puis la vue de comparaison RL) |
 | A11 | Brancher `research/phase9.py` sur les fonds | fait en partie (lot 7b : `fund/regime.py`, régime de marché de phase9 (VIX, S&P 500) affiché sur /fonds avec ses déclencheurs ; pas de modulation de l'exposition, non mesurée) |
 | A12 | Ordres limite et exécutions partielles | fait (lot 7c : `fund/limit_orders.py`, migration 0059 : ordres limite à validité, exécutés sur les séances suivantes au prix de la limite ou de l'ouverture, tranches d'au plus 10 % du volume ; résolus chaque nuit avant les cycles ; champ « Prix limite » du ticket, liste et annulation dans le panneau) |
 | A13 | Ordres manuels sur un fonds | déjà fait (saisie d'un ordre ou d'une position à la main : « Nouvelle position », `/api/fund/strategies/{id}/orders`) ; « 0 ordre manuel » était un constat d'usage |
@@ -50,10 +50,10 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | B3 | Supprimer la branche après fusion (réglage GitHub) | fait (réglage du dépôt activé le 24/11 ; vérifié : la branche du lot 1 a disparu seule après fusion) |
 | B4 | Tests de mutation : renforcer `dsr` et `diebold_mariano` | fait en partie (lot 3 : `tests/validation/test_dsr_dm_reference.py`, valeurs exactes contre une réimplémentation indépendante) ; taux de mutants tués à remesurer au prochain passage mensuel de `mutation.yml` |
 | B5 | Remplacer les `except Exception` larges | fait (lot 2 : les 21 replis silencieux journalisés ; les 113 autres laissaient déjà une trace) |
-| B6 | Découper `webapp/app.py` | à faire |
-| B7 | Découper `pipeline/engine.py` | à faire |
-| B8 | Séparer lecture / écriture dans `tracking/db.py` et `history.py` | à faire |
-| B9 | Découper `patrick.css` | à faire |
+| B6 | Découper `webapp/app.py` | fait en partie (lot 9 : fragments de la fiche d'un actif sortis vers `webapp/routes/assets.py`, app.py 3 064 -> 2 975 lignes ; le reste à découper par blocs de routes, même méthode) |
+| B7 | Découper `pipeline/engine.py` | fait en partie (lot 9 : identité d'un run (`_config_hash`, `_features_payload`) sortie vers `pipeline/identity.py`, réexportée ; golden local identique) |
+| B8 | Séparer lecture / écriture dans `tracking/db.py` et `history.py` | fait en partie (lot 9 : lectures groupées des runs sorties vers `tracking/run_queries.py`, lecture seule, réexportées ; db.py 1 687 -> 1 330 lignes) |
+| B9 | Découper `patrick.css` | fait (lot 9 : `patrick.css` (socle : jetons, base, coque, composants) et `patrick-pages.css` (styles des pages), chargées dans le même ordre ; rendu vérifié) |
 | B10 | Sélection SHAP une fois par (données, pli) | fait (lot 4 : `shap_order`, un seul pilote SHAP pour toute la grille de N, sélections identiques ; méthode shap seulement) |
 | B11 | Pools paramétriques par pli en parallèle | déjà fait (`features/parametric_parallel.py`, `PATRICK_PARAMETRIC_JOBS`, réglage de la page « Lancer ») |
 | B12 | Cache des plis préparés | écarté : gain direct mesuré faible (NEXT_STEPS, Sprint 2) |
@@ -62,11 +62,11 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | B15 | Moins de sélections CPCV distinctes | à décider : changerait les résultats CPCV (méthodologique) |
 | B16 | DM sur la log-loss | fait (lot 3 : `dm_logloss`, migration 0057 `dm_logloss_result`) |
 | B17 | Seuils CPCV par combinaison | fait (lot 3, avec C8) |
-| B18 | Contrats à terme continus ajustés des sauts d'échéance | à faire |
+| B18 | Contrats à terme continus ajustés des sauts d'échéance | écarté : bloqué par les données. Un ajustement des sauts d'échéance exige les contrats individuels, échus compris ; Yahoo n'en sert aucun historique (vérifié le 25/11 : CLZ25, ESZ25, ESH26, GCG26 vides). Prérequis inchangé : `docs/modelisation/chantiers-lointains.md` §3 ; l'avis « contrat continu non ajusté » reste affiché |
 | B19 | `ANALYZE` automatique en fin de job | fait (lot 4 : `PRAGMA optimize` borné en fin de job ; `ensure_planner_stats` faisait déjà le premier ANALYZE) |
-| B20 | /fonds plus rapide | à faire |
+| B20 | /fonds plus rapide | fait (lot 9 : aperçu de /fonds de 40-48 s à 12,7 s sur une copie des vraies données, dont ~4 s d'import de scipy payé une fois : cotations lues depuis l'ouverture moins 60 jours au lieu de 2000, une lecture par symbole par calcul d'ensemble, dates lues avec leur format, test scalaire dans la boucle de simulation ; résultats identiques vérifiés) |
 | B21 | pytest-xdist dans la CI rapide | déjà fait (`-n auto` dans `tests.yml`) |
-| B22 | Vérification des types (pyright) | à faire |
+| B22 | Vérification des types (pyright) | fait (lot 9 : `patrick/pyrightconfig.json`, cliquet sur les 248 fichiers déjà sans erreur en mode standard (sur 474 ; 2 658 erreurs ailleurs), tâche « types » de la CI hors conditions de `stable`, test qui vérifie que les fichiers listés existent) |
 | B23 | graphify à jour | en cours (lot 1, local) |
 | B24 | Mesurer le cache de téléchargement | fait (lot 4 : mesuré sur 20 journaux de worker, 93 % en cache, 6 % téléchargés, 0,82 h en tout : pas un goulot) |
 | B25 | Tests de mutation mensuels | fait (PR 97 : 1er du mois, 06:00 UTC) |

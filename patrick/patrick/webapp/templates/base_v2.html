@@ -31,6 +31,7 @@ script below (no flash), otherwise the OS preference applies.
     <link rel="preload" href="/static/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="/static/fonts/jetbrainsmono-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="{{ asset('patrick.css') }}">
+    <link rel="stylesheet" href="{{ asset('patrick-pages.css') }}">
     {# Moteur de graphiques : chargé dès l'en-tête, car les scripts des pages (dans le bloc content) tracent avant les scripts de pied de page. #}
     <script src="{{ asset('chart_kit.js') }}"></script>
     {# Noms des instruments pour les scripts (window.PatrickNames) : les données sont dans la page, lues au premier appel. #}

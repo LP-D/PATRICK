@@ -91,7 +91,7 @@ def witnesses(conn: sqlite3.Connection, strategy: dict, snapshot: dict, today: d
     flippable = sorted({o["position_id"] for o in orders if o.get("instrument_kind") in engine.DERIV_KINDS and o.get("side")})
     if not flippable:
         return None
-    market, _ = prices.build_market(conn, orders, strategy["base_currency"])
+    market, _ = prices.build_market(conn, orders, strategy["base_currency"], opened_on=strategy.get("opened_on"))
 
     def nav(side_of: dict[str, str]) -> float:
         daily = engine.simulate(strategy, _with_sides(orders, side_of), market, end=today).daily
@@ -126,7 +126,7 @@ def current_drawdown(conn: sqlite3.Connection, strategy: dict, today: dt.date | 
     orders = store.list_orders(conn, strategy["strategy_id"])
     if not orders:
         return None
-    market, _ = prices.build_market(conn, orders, strategy["base_currency"])
+    market, _ = prices.build_market(conn, orders, strategy["base_currency"], opened_on=strategy.get("opened_on"))
     nav = engine.simulate(strategy, orders, market, end=today).daily["nav"]
     if nav.empty:
         return None

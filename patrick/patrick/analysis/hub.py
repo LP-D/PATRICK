@@ -10,6 +10,7 @@ import sqlite3
 import numpy as np
 
 from patrick.analysis import stats_core as sc
+from patrick.config.target_label import ALPHA_SEP
 from patrick.validation import metric_panel
 
 
@@ -70,7 +71,7 @@ def _ml_rows(conn: sqlite3.Connection) -> list[dict]:
                     "auc_holdout": hold_m.get("AUC_ovr_4cls"), "panel_test": metric_panel.panel(test_m), "panel_holdout": metric_panel.panel(hold_m),
                     "dm_p": (dm.get(run_id) or {}).get("p_value"),
                     "dm_sample": (dm.get(run_id) or {}).get("sample"), "suspect": bool(suspicion.suspect_reason(hold_m) or suspicion.suspect_reason(test_m)),
-                    "n_trials": n_trials, "benchmark_f1": bench.get(run_id), "alpha": trackdb.ALPHA_SEP in (target or ""),
+                    "n_trials": n_trials, "benchmark_f1": bench.get(run_id), "alpha": ALPHA_SEP in (target or ""),
                     "url": f"/runs/{run_id}/analyse"})
     return out
 

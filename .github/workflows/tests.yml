@@ -116,6 +116,26 @@ jobs:
       - name: Golden master and pipeline smoke
         run: pytest patrick/tests/pipeline/test_run_pipeline_golden.py patrick/tests/pipeline/test_pipeline_smoke.py -q -m "slow"
 
+  types:
+    # Vérification des types (B22) : cliquet sur les fichiers listés dans patrick/pyrightconfig.json (déjà sans erreur en mode
+    # standard). Une erreur nouvelle rend la PR rouge ; la tâche ne fait pas partie des conditions de `promote` (une mise à jour
+    # de bibliothèque qui change une inférence ne doit pas bloquer les PC installés).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies (pinned) and pyright
+        run: pip install -c .github/constraints-py311.txt -e "./patrick[dev,web]" pyright==1.1.414
+
+      - name: Pyright
+        working-directory: patrick
+        run: pyright
+
   promote:
     # Les PC installés suivent la branche `stable` (patrick/desktop/update.py), jamais `main` : elle avance sur le
     # commit qui vient de passer TOUTES les vérifications (2 versions de Python pour la suite rapide + la suite lente).

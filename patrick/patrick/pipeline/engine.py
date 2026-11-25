@@ -49,7 +49,6 @@ import pandas as pd
 from sklearn.preprocessing import RobustScaler
 
 from patrick.config import defaults as D
-from patrick.config.equity_universe import is_equity_symbol
 from patrick.config.schema import RunConfig
 from patrick.config.targets import refuse_non_target
 from patrick.core.clock import utc_today
@@ -60,7 +59,6 @@ from patrick.data.ingest import ingest, load_snapshot
 from patrick.data.session_calendar import (
     CURRENT_SESSION_RULE,
     classify_asset_class,
-    session_rule_tag,
 )
 from patrick.data.sources.yfinance_source import clean_symbol, download_ohlc
 from patrick.data.store import DataStore
@@ -97,6 +95,12 @@ from patrick.models.uniqueness import (
     effective_sample_size,
 )
 from patrick.pipeline import early_stop_shadow, parallel, pause, scan_checkpoint
+from patrick.pipeline.identity import (  # noqa: F401 -- réexport : engine._config_hash reste valable (B7)
+    _ALPHA_FIELDS,
+    _config_hash,
+    _features_payload,
+    _fracdiff_levels,
+)
 from patrick.pipeline.leaderboard import Leaderboard
 from patrick.selection import universe_reduction
 from patrick.selection._common import RANKING_VERSION
@@ -156,31 +160,6 @@ def _sanitize_lookback_windows(windows: list[int], min_allowed: int, label: str)
         print(f"  [WARN] {label}: invalid lookback window(s) {dropped} ignored "
               f"(must be an integer >= {min_allowed}) — computed with {kept or 'no window'}.")
     return kept
-
-
-def _fracdiff_levels(config: RunConfig) -> bool:
-    """Méthode 3 (ADR 0011) : les niveaux bruts (colonnes de cours et de séries macro) entrent dans la réserve différenciés fractionnairement."""
-    return config.validation.method_version >= 3
-
-
-def _features_payload(config: RunConfig) -> dict:
-    # La clé de cache ne bouge que pour la méthode 3 : un run de méthode 1 ou 2 retrouve ses réserves déjà calculées.
-    features = config.features.model_dump(mode="json")
-    extra: dict = {}
-    # A4 : le drapeau texte n'entre dans la clé que levé (sinon tout le cache existant serait invalidé) ; levé, l'état du magasin de
-    # nouvelles y entre aussi (une nouvelle arrivée après la mise en cache changerait la dernière séance).
-    if not features.get("enable_text_features"):
-        features.pop("enable_text_features", None)
-    else:
-        from patrick.features import text_features
-        extra["text_store"] = text_features.store_fingerprint()
-    # A3 : les modèles de `vol_models_extra` portent leur propre empreinte de code, seulement pour les runs qui les choisissent.
-    from patrick.features import vol_models_extra
-    if set(config.features.vol_models) & set(vol_models_extra.MODELS):
-        extra["vol_extra_code"] = vol_models_extra.CODE_HASH
-    return {"features": features,
-            "fred": sorted(config.universe.fred_series), "target": config.objective.target_symbol,
-            **({"raw_level": "fracdiff"} if _fracdiff_levels(config) else {}), **extra}
 
 
 def _stationary_raw(raw: pd.DataFrame, config: RunConfig, target_col: str) -> pd.DataFrame:
@@ -1338,9 +1317,6 @@ def _evaluate_diebold_mariano(conn, snapshot_id: str, ctx: _FoldContext, best_cf
     return {"asset_class": asset_class, "sample": sample, **dms}
 
 
-_ALPHA_FIELDS = {"objective": {"target_kind", "benchmark", "benchmark_source"}}
-
-
 def _require_alpha_columns(raw: pd.DataFrame, config: RunConfig) -> None:
     """Une cible alpha a besoin de son benchmark dans les données : si le contrôle qualité de l'ingestion l'a écarté
     (cours figés, trou de cotation, rendement aberrant), on le dit clairement plutôt que de planter plus loin."""
@@ -1362,60 +1338,6 @@ def _criterion(config: RunConfig) -> str:
     if config.objective.task == "value":
         return config.selection.criterion if config.selection.criterion in ("IC", "R2_oos") else "IC"
     return config.selection.criterion if config.validation.scheme == "walkforward" else "F1_dir"
-
-
-def _config_hash(config: RunConfig) -> str:
-    # Un run brut garde exactement le hachage d'avant l'ajout des champs alpha (reprise des runs existants,
-    # noms d'études Optuna) : ils ne sont dans la charge utile que pour une cible alpha.
-    obj_exclude: set[str] = set(_ALPHA_FIELDS["objective"]) if config.objective.target_kind == "raw" else set()
-    # Idem pour la garde anti-fuite (`data/alignment.py`) : un run dont les entrées n'ont reçu aucun décalage (runs
-    # antérieurs, ou audit sans rien à corriger) garde son hachage d'avant.
-    align = config.objective.alignment
-    if not (align.column_lags or align.dropped or align.drop_future):
-        obj_exclude |= {"leak_guard", "alignment"}
-    # Idem pour la règle d'alignement des séances : seule une cible de change sous la règle 2 est construite autrement,
-    # toute autre cible (et tout run d'avant le champ) garde son hachage.
-    if not session_rule_tag(config.objective.target_symbol, config.objective.target_source, config.objective.session_rule):
-        obj_exclude.add("session_rule")
-    # Idem pour l'objectif : un modèle de direction (tout run d'avant le champ) garde son hachage.
-    if config.objective.task == "direction":
-        obj_exclude.add("task")
-    exclude: dict = {"objective": obj_exclude} if obj_exclude else {}
-    # Idem pour les réseaux de neurones (`models.deep`) : absent de tout run de machine learning, donc hors du hachage tant qu'il est `None`.
-    if config.models.deep is None:
-        exclude["models"] = {"deep"}
-    # Idem pour la règle de parcimonie « une erreur-type » : hors du hachage quand elle est désactivée, donc une config qui
-    # la désactive garde le hachage d'avant le champ ; activée (défaut), elle change le gagnant et entre dans le hachage.
-    selection_exclude = set()
-    if not config.selection.one_se_rule:
-        selection_exclude.add("one_se_rule")
-    # Idem pour le critère de sélection : `F1_dir` (tout run d'avant le champ, relu par `from_stored_json`) garde son hachage.
-    if config.selection.criterion == "F1_dir":
-        selection_exclude.add("criterion")
-    if selection_exclude:
-        exclude["selection"] = selection_exclude
-    # Idem pour la version de méthode : un run de méthode 1 (tout run d'avant le champ) garde son hachage.
-    validation_exclude = set()
-    if config.validation.method_version < 2:
-        validation_exclude.add("method_version")
-    # Idem pour l'exclusion des cours figés : hors du hachage tant qu'elle est fausse (tout run d'avant le champ).
-    if not config.validation.drop_stale_returns:
-        validation_exclude.add("drop_stale_returns")
-    if not config.validation.cpcv_thresholds_per_combo:
-        validation_exclude.add("cpcv_thresholds_per_combo")
-    if validation_exclude:
-        exclude["validation"] = validation_exclude
-    # Idem pour les features de contexte des actions : sans effet sur une cible qui n'est pas une action, et absentes de tout run d'avant
-    # le champ ; seul un run d'action qui les active les porte dans son hachage.
-    features_exclude = set()
-    if not (config.features.enable_equity_context_features and is_equity_symbol(config.objective.target_symbol)):
-        features_exclude.add("enable_equity_context_features")
-    if not config.features.enable_text_features:                 # A4 : idem, hors du hachage tant qu'il est faux
-        features_exclude.add("enable_text_features")
-    if features_exclude:
-        exclude["features"] = features_exclude
-    exclude = exclude or None
-    return hashlib.sha256(config.model_dump_json(exclude=exclude).encode()).hexdigest()[:16]
 
 
 def _snapshot_context(raw: pd.DataFrame) -> tuple[str, str, int | None, int | None, str | None, list]:

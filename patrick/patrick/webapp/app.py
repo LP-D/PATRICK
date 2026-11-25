@@ -29,7 +29,6 @@ from fastapi.responses import (
     HTMLResponse,
     JSONResponse,
     RedirectResponse,
-    Response,
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -94,6 +93,9 @@ from patrick.webapp.i18n import core as i18n
 from patrick.webapp.i18n import server as i18n_server
 from patrick.webapp.routes import (
     analysis as analysis_routes,
+)
+from patrick.webapp.routes import (
+    assets as assets_routes,
 )
 from patrick.webapp.routes import (
     data as data_routes,
@@ -2238,101 +2240,6 @@ def _asset_overview_from_snapshot(symbol: str) -> dict | None:
     return None
 
 
-@app.get("/api/export/patrick.xlsx")
-def export_xlsx():
-    """Classeur Excel (A25) : dernières prédictions des champions, champions, fonds. Lecture seule."""
-    from patrick.fund import service
-    from patrick.webapp import excel_export
-    conn = trackdb.connect()
-    try:
-        data = excel_export.workbook_bytes(conn, service.current_date())
-    finally:
-        conn.close()
-    name = f"patrick-{utc_today().isoformat()}.xlsx"
-    return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
-
-
-@app.get("/fragments/vol-forecast/{symbol}")
-def vol_forecast_fragment(request: Request, symbol: str):
-    """Volatilité prévue d'un actif (A1, D8) : HAR-RV du lendemain contre la volatilité glissante, jugés en QLIKE. Une TAILLE de position,
-    jamais une direction : affichée à part des signaux."""
-    import pandas as pd
-
-    from patrick.fund import vol_forecast
-    source = forms.TARGET_SOURCE_BY_SYMBOL.get(symbol)
-    if source is None:
-        raise HTTPException(status_code=404, detail="Cible inconnue")
-    hist = market_data.price_history(symbol, source, "5y")
-    out = None
-    if hist.get("closes"):
-        df = pd.DataFrame({"close": hist["closes"]}, index=pd.to_datetime(hist["dates"]))
-        for key, col in (("opens", "open"), ("highs", "high"), ("lows", "low")):
-            if hist.get(key) and len(hist[key]) == len(df):
-                df[col] = pd.to_numeric(pd.Series(hist[key], index=df.index), errors="coerce")
-        forecast = vol_forecast.har_sigma(df)
-        if forecast:
-            out = {**forecast, "eval": vol_forecast.evaluate(df), "ohlc": {"open", "high", "low"}.issubset(df.columns)}
-    return templates.TemplateResponse(request, "_vol_forecast.html", {**_i18n_context(request), "vf": out})
-
-
-_VALUATION_CACHE: dict[str, tuple[float, dict]] = {}
-_VALUATION_TTL_S = 6 * 3600
-
-
-@app.get("/fragments/valuation/{symbol}")
-def valuation_fragment(request: Request, symbol: str, g: float = 0.05):
-    """Valorisation d'une action (A8) : multiples, DCF inversé (croissance que le prix suppose) et DCF à hypothèse explicite `g`
-    (croissance annuelle du FCF sur 10 ans, bornée à [-20 % ; 30 %]) avec sa table de sensibilité. Données yfinance gardées 6 h."""
-    import time as _time
-
-    from patrick.analysis import valuation
-    if forms.TARGET_SOURCE_BY_SYMBOL.get(symbol) != "yfinance":
-        raise HTTPException(status_code=404, detail="Cible inconnue")
-    g = min(max(g, -0.20), 0.30)
-    now = _time.monotonic()
-    cached = _VALUATION_CACHE.get(symbol)
-    if cached is None or now - cached[0] > _VALUATION_TTL_S:
-        info = valuation.load_info(symbol)
-        try:
-            rf = valuation.risk_free(info.get("currency"))
-        except Exception:  # noqa: BLE001 -- frontière fournisseur : le taux sans risque par défaut prend le relais
-            rf = None
-        cached = (now, {"info": info, "rf": rf})
-        _VALUATION_CACHE[symbol] = cached
-    data = cached[1]
-    out = valuation.analyse(data["info"], rf=data["rf"], growth=g) if data["info"] else None
-    return templates.TemplateResponse(request, "_valuation.html", {**_i18n_context(request), "val": out, "symbol": symbol, "g": g})
-
-
-@app.get("/fragments/pooled-heatmap")
-def pooled_heatmap_fragment(request: Request):
-    """Carte de chaleur cible x horizon de l'AUC regroupée (D10), sur la Synthèse : où est le signal, en un coup d'oeil."""
-    from patrick.tracking import pooled_signal
-    conn = trackdb.connect()
-    try:
-        grid = pooled_signal.heatmap(pooled_signal.load(conn))
-    finally:
-        conn.close()
-    return templates.TemplateResponse(request, "_pooled_heatmap.html", {**_i18n_context(request), "grid": grid})
-
-
-@app.get("/fragments/champion-history/{symbol}")
-def champion_history_fragment(request: Request, symbol: str):
-    """Frise des champions d'un actif (D26) : qui a tenu le titre à chaque horizon, de quand à quand. Chargé après l'affichage."""
-    from patrick.tracking import champion_history
-    if symbol not in forms.TARGET_SOURCE_BY_SYMBOL:
-        raise HTTPException(status_code=404, detail="Cible inconnue")
-    conn = trackdb.connect()
-    try:
-        by_horizon = champion_history.history(conn, symbol)
-    finally:
-        conn.close()
-    longest = max((r["days"] or 0 for reigns in by_horizon.values() for r in reigns), default=0)
-    return templates.TemplateResponse(request, "_champion_history.html",
-                                      {**_i18n_context(request), "by_horizon": by_horizon, "longest": max(longest, 1)})
-
-
 @app.get("/fragments/asset-signals/{symbol}")
 def asset_signals_fragment(request: Request, symbol: str, dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA):
     """Fiche d'un actif : ses signaux du jour, un par horizon (même cellule et même bulle que `/predictions`), avec le champion de
@@ -2585,6 +2492,9 @@ placements_routes.register(app, templates, lambda request: _i18n_context(request
 
 # Page Stratégies (/strategies) et API /api/strategies/* : laboratoire acheter avant / vendre après un événement, straddles (patrick/strategylab/).
 strategies_routes.register(app, templates, lambda request: _i18n_context(request))
+
+# Fiche d'un actif : export Excel, volatilité prévue, valorisation, carte de chaleur, frise des champions (B6, sortis de ce fichier).
+assets_routes.register(app, templates, lambda request: _i18n_context(request))
 
 
 def _check_min_history_years(min_history_years: int) -> None:

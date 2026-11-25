@@ -17,7 +17,7 @@ from patrick.webapp.app import BASE_DIR, app
 from patrick.webapp.i18n import core as i18n
 
 STATIC = BASE_DIR / "static"
-CSS = (STATIC / "patrick.css").read_text(encoding="utf-8")
+CSS = "\n".join((STATIC / n).read_text(encoding="utf-8") for n in ("patrick.css", "patrick-pages.css"))
 
 
 @pytest.fixture
