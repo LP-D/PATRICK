@@ -12,6 +12,7 @@ KEY_AUTO_UPDATE = "auto_update"        # chercher une nouvelle version au démar
 KEY_SYNC_ON_START = "sync_on_start"    # fusionner le partage avant d'ouvrir PATRICK
 KEY_SYNC_ON_CLOSE = "sync_on_close"    # publier ce PC à la fermeture
 KEY_APP_WINDOW = "app_window"          # fenêtre dédiée (Chrome/Edge « mode app ») plutôt que le navigateur par défaut
+KEY_NOTIFY_NIGHT = "notify_night"      # notification Windows en fin de nuit quand il y a quelque chose à signaler (A15)
 KEY_PORT = "port"                      # port local du serveur
 
 DEFAULT_PORT = 8000
@@ -22,9 +23,10 @@ DEFAULTS: dict[str, bool | int] = {
     KEY_SYNC_ON_START: True,
     KEY_SYNC_ON_CLOSE: True,
     KEY_APP_WINDOW: True,
+    KEY_NOTIFY_NIGHT: True,
     KEY_PORT: DEFAULT_PORT,
 }
-BOOL_KEYS = (KEY_AUTO_UPDATE, KEY_SYNC_ON_START, KEY_SYNC_ON_CLOSE, KEY_APP_WINDOW)
+BOOL_KEYS = (KEY_AUTO_UPDATE, KEY_SYNC_ON_START, KEY_SYNC_ON_CLOSE, KEY_APP_WINDOW, KEY_NOTIFY_NIGHT)
 
 
 class PrefError(ValueError):

@@ -57,7 +57,7 @@
             $("share-task").textContent = o.share.task.registered
                 ? tr("app_task_on", {next: o.share.task.next_run || "—"}) : tr("app_task_off");
         }
-        ["sync_on_start", "sync_on_close", "auto_update", "app_window"].forEach(function (key) {
+        ["sync_on_start", "sync_on_close", "auto_update", "app_window", "notify_night"].forEach(function (key) {
             $("pref-" + key).checked = !!o.prefs[key];
         });
         $("pref-port").value = o.prefs.port;
@@ -220,7 +220,7 @@
     });
 
     // ------------------------------------------------------------------ préférences (cases à cocher)
-    ["sync_on_start", "sync_on_close", "auto_update", "app_window"].forEach(function (key) {
+    ["sync_on_start", "sync_on_close", "auto_update", "app_window", "notify_night"].forEach(function (key) {
         $("pref-" + key).addEventListener("change", function () {
             var body = {};
             body[key] = this.checked;

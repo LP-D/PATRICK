@@ -9,7 +9,7 @@ from patrick.desktop import prefs
 
 def test_defaults_when_nothing_is_saved():
     assert prefs.all_prefs() == {"auto_update": True, "sync_on_start": True, "sync_on_close": True,
-                                 "app_window": True, "port": 8000}
+                                 "app_window": True, "notify_night": True, "port": 8000}
     assert prefs.setup_done() is False
 
 

@@ -131,6 +131,7 @@ Step "signaux regroupes" @("-m", "patrick.cli", "audit", "signal")
 Step "synchronisation" @("-m", "patrick.cli", "sync", "auto")
 Step "autres predictions" @($Predict, "--base-dir", $RepoDir, "--log-file", $PredictLog, "--skip-funds")
 
+if (-not $DryRun) { & $Python -m patrick.cli notify-night *>> $LogFile }     # resume Windows seulement s'il y a quelque chose a signaler (A15)
 if ($End -eq "none") { Log "== fin : aucune extinction demandee"; return }
 if (Patrick-Busy) { Log "== fin : PATRICK est ouvert ou un entrainement tourne : le PC reste allume"; return }
 $idle = [PatrickIdle]::IdleMinutes()

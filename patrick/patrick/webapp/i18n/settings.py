@@ -42,6 +42,7 @@ SETTINGS_STRINGS: dict[str, dict[str, str]] = {
     "app_share_sync_start": _s("Fusionner les résultats des autres PC au démarrage",
                                "Merge the other PCs' results at startup"),
     "app_share_sync_close": _s("Publier ce PC à la fermeture", "Publish this PC on exit"),
+    "app_notify_night": _s("Notification Windows en fin de nuit s'il y a quelque chose à signaler (nuit en échec, champions remplacés, fonds arrêtés)", "Windows notification at the end of the night when there is something to report (failed night, replaced champions, halted funds)"),
     "app_share_sync_now": _s("Synchroniser maintenant", "Sync now"),
     "app_share_clear_label": _s("Ne plus partager", "Stop sharing"),
     "app_share_sync_now_label": _s("Synchroniser", "Sync"),
