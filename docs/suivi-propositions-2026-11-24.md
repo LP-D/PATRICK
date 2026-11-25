@@ -12,7 +12,7 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 |---|---|---|
 | A1 | Prévision du niveau de volatilité (HAR, QLIKE) pour dimensionner les fonds | fait (lot 7 : `fund/vol_forecast.py`, HAR-RV jugé en QLIKE ; pilote `vol_model = har` ; S&P 500 réel : gain QLIKE +29,7 %) |
 | A2 | DCC-GARCH dans `tracking/covariance.py` | fait (lot 7b : estimateur `dcc` dans `tracking/covariance.py`, DCC(1,1) sur résidus GARCH, 750 séances) |
-| A3 | Variables GJR / APARCH / HAR dans le ML (option hors empreinte) | à faire |
+| A3 | Variables GJR / APARCH / HAR dans le ML (option hors empreinte) | fait (lot 7b : modèles de volatilité `gjr`, `aparch` et `har` dans `features/vol_models.py`, estimés sur le train de chaque pli ; proposés dans le formulaire, hors des défauts : aucune empreinte de run ne change) |
 | A4 | Variables texte (ton banques centrales / actualités) dans l'entraînement | à faire |
 | A5 | Volatilité intrajournalière (Parkinson, Garman-Klass) | fait (lot 7 : variance de Garman-Klass ramenée à l'échelle clôture à clôture, dans la prévision HAR) |
 | A6 | Carry trade | déjà fait (ADR 0015 : carry de change mesuré sur 7 devises 2000-2025, Sharpe 0,17-0,18, Sharpe déflaté 0,64 ; non adopté, à rouvrir sur un fait nouveau) |

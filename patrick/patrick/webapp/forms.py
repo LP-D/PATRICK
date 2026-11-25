@@ -206,6 +206,9 @@ VOL_MODEL_LABELS = {
     "ma": "MA (moyenne mobile)",
     "arma": "ARMA",
     "arima": "ARIMA",
+    "gjr": "GJR-GARCH (levier)",
+    "aparch": "APARCH (levier, puissance estimée)",
+    "har": "HAR-RV (mémoire 1, 5 et 22 jours)",
 }
 
 
