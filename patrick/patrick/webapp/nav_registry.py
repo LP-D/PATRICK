@@ -153,6 +153,7 @@ NON_PAGE_ROUTES: frozenset[str] = frozenset({
     "/runs/{run_id}/results",
     "/runs/{run_id}/download/{artifact}",
     "/runs/{run_id}/analyse/export",   # rapport HTML autonome (téléchargement)
+    "/sante/rapport/{name}.pdf",      # rapport hebdomadaire en PDF (téléchargement, A16)
     "/launch",                  # redirection permanente vers /ml (ancien poste de lancement, liens et marque-pages conserves)
     "/patrimoine-simulation",   # redirection permanente vers /fonds (ancienne page « Simulateur patrimoine »)
     "/equities",                # redirection permanente vers /equity (ancienne page « Actions individuelles »)

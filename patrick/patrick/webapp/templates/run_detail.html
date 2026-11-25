@@ -359,7 +359,7 @@
 </section>
 
 {# A27 : questions en langage naturel sur ce run (Claude, depuis les seuls chiffres enregistrés ; static/run_qa.js). #}
-<section id="questions" class="card run-qa" data-run-id="{{ run.run_id }}" data-label-wait="{{ t('qa_wait') }}" data-label-leak="{{ t('qa_leak') }}" data-label-error="{{ t('qa_error') }}" data-label-refused="{{ t('qa_refused') }}">
+<section id="questions" class="card run-qa" data-run-id="{{ run.run_id }}" data-label-wait="{{ t('qa_wait') }}" data-label-leak="{{ t('qa_leak', cutoff='{cutoff}', share='{share}') }}" data-label-error="{{ t('qa_error') }}" data-label-refused="{{ t('qa_refused') }}">
 <h2>{{ t('qa_title') }}</h2>
 <p class="hint">{{ t('qa_hint') }}</p>
 <form class="run-qa-form">
