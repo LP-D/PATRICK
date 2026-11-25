@@ -23,8 +23,8 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 | AM7 | Éviction du cache de variables selon le coût | fait (lots 4-5 : durée du calcul écrite à côté de chaque pool (`.cost`), l'éviction rajeunit un pool cher : 1 min de calcul = 4 h, plafond 40 h ; jamais un fichier lu depuis moins d'une heure) |
 | AM8 | Worker en tâche planifiée Windows | fait, installation à toi (lots 4-5 : `patrick worker --if-no-worker` et `scripts/schtasks_worker.ps1 -Install`, toutes les 15 min : relance un worker mort s'il y a des jobs, jamais un second) |
 | AM9 | File triée par le conseiller de ré-entraînement | fait (lots 4-5 : bouton « Trier par urgence » de la file : paires sans champion, puis champions les plus anciens ; ordre modifiable ensuite) |
-| AM10 | Bande de non-transaction sur les fonds | à faire (lot 7) |
-| AM11 | Spreads calibrés sur les vrais bid/ask | à faire (lot 7) |
+| AM10 | Bande de non-transaction sur les fonds | déjà fait : le pilote ne change une taille que si le budget a bougé de plus de 10 % (`autopilot.SIZING_TOLERANCE`) |
+| AM11 | Spreads calibrés sur les vrais bid/ask | fait en partie (lot 7 : `patrick fund spreads` mesure l'écart achat-vente affiché par Yahoo par classe et le compare aux médianes du modèle) ; remplacer les médianes = décision (change les frais et le P&L passé des fonds) |
 | AM12 | Intervalles de confiance sur AUC et F1 | déjà fait : AUC avec intervalle de bootstrap par blocs dans l'analyse d'un run (sections « prédiction » et « robustesse », `analysis/sec_predict.py`, `sec_robust.py`) |
 | AM13 | Recherche Ctrl K élargie | à faire (lot 9) |
 | AM14 | Cliquet pyright sur les modules d'argent | fait (lots 2-3 : `fund/selection.py`, `core/perf.py`, `tracking/run_queries.py` ajoutés au cliquet pyright ; le reste des modules d'argent compte 316 erreurs, surtout des annotations de pandas) |
@@ -93,12 +93,12 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 | FO7 | Régime HMM comme variable | déjà fait : variable `hmm_filtered_stress_prob` (régime filtré par HMM, sans regard vers le futur) dans `features/vol_models.py` |
 | FO8 | Score de robustesse d'un champion | fait (lot 6 : `validation/robustness.py`, note sur 100 en tête de la page d'un run, avec ce qui manque) |
 | FO9 | Ré-entraînement automatique en cas de dérive | fait, réglage à toi (lots 4-5 : `patrick retrain auto`, dernière étape de la nuit, met en file les premiers runs conseillés dans le budget `auto_retrain_per_week` ; 0 par défaut) |
-| FO10 | Rejouer la règle de sélection des fonds | à faire (lot 7) |
-| FO11 | Mode « et si » d'un fonds | à faire (lot 7) |
-| FO12 | Historique daté des réglages d'un fonds | à faire (lot 7) |
-| FO13 | Attribution de performance | à faire (lot 7) |
-| FO14 | Rapport mensuel en PDF par fonds | à faire (lot 7) |
-| FO15 | Stress tests historiques | à faire (lot 7) |
+| FO10 | Rejouer la règle de sélection des fonds | déjà fait en partie : écart holdout / réel par champion sur /reel (D29) ; rejouer la sélection dans le passé contredit la règle à sens unique du pilote (une règle ne rejoue jamais le passé avec une sélection d'aujourd'hui) |
+| FO11 | Mode « et si » d'un fonds | déjà fait en partie : « Aperçu » du pilote (réglages essayés sans être appliqués) ; une courbe rejouée irait contre la même règle à sens unique |
+| FO12 | Historique daté des réglages d'un fonds | fait (lot 7 : migration 0060 `fund_settings_log`, chaque activation, changement et désactivation daté avec les réglages changés ; « Historique des réglages » dans le panneau) |
+| FO13 | Attribution de performance | déjà fait : `fund/insight.attribution` (P&L par modèle, par classe d'actifs, par sens), panneau d'un fonds |
+| FO14 | Rapport mensuel en PDF par fonds | fait (lot 7 : `fund/monthly_report.py`, « Rapport du mois (PDF) » dans le panneau : performance, attribution, ordres, positions, stress tests) |
+| FO15 | Stress tests historiques | fait (lot 7 : positions ouvertes rejouées sur six crises (2000, 2008, 2011, 2018, 2020, 2022), sens et notionnel des dérivés compris ; dans le rapport et `/api/fund/strategies/{id}/stress`) |
 | FO16 | Alertes de prix et de signal | à faire (lot 8) |
 | FO17 | Explication en clair de chaque prédiction | à faire (lot 8) |
 | FO18 | Comparaison de deux ré-entraînements | à faire (lot 8) |

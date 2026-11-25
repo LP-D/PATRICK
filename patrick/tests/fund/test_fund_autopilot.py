@@ -425,3 +425,16 @@ def test_settings_accept_no_cap_on_the_number_of_models():
 
     assert settings.selection.max_models is None and settings.to_dict()["max_models"] is None
     assert autopilot.Settings.from_dict(settings.to_dict()) == settings
+
+
+def test_every_settings_change_is_dated_in_the_history(conn):
+    """FO12 (25/11) : activation, changement et désactivation du pilote laissent une trace datée, avec les réglages changés."""
+    sid = _strategy(conn)
+    autopilot.configure(conn, sid, {"tier": "large", "gross": 0.5})
+    autopilot.configure(conn, sid, {"tier": "large", "gross": 0.5})          # rien ne change : pas de nouvelle ligne
+    autopilot.configure(conn, sid, {"tier": "strict", "gross": 0.8})
+    autopilot.disable(conn, sid)
+    history = autopilot.settings_history(conn, sid)
+    assert [h["action"] for h in history] == ["disable", "update", "enable"]
+    assert history[1]["changes"]["gross"] == (0.5, 0.8) and history[1]["changes"]["tier"] == ("large", "strict")
+    assert autopilot.status(conn, sid)["history"][0]["action"] == "disable"
