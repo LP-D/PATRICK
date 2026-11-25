@@ -20,6 +20,7 @@
                     <span id="queue-summary"></span>
                 </button>
                 <button type="button" id="sort-queue-btn" class="queue-action" title="{{ t('queue_sort_urgency_tip') }}">{{ t('queue_sort_urgency') }}</button>
+                <label class="queue-hold" title="{{ t('queue_hold_tip') }}">{{ t('queue_hold') }} <input type="datetime-local" id="queue-hold-at" step="60"></label>
                 <button type="button" id="clear-queue-btn" class="queue-action danger">{{ t('queue_clear') }}</button>
             </div>
             <ol id="queue-list" class="queue-list" hidden></ol>

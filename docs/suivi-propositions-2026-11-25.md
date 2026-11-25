@@ -26,7 +26,7 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 | AM10 | Bande de non-transaction sur les fonds | déjà fait : le pilote ne change une taille que si le budget a bougé de plus de 10 % (`autopilot.SIZING_TOLERANCE`) |
 | AM11 | Spreads calibrés sur les vrais bid/ask | fait en partie (lot 7 : `patrick fund spreads` mesure l'écart achat-vente affiché par Yahoo par classe et le compare aux médianes du modèle) ; remplacer les médianes = décision (change les frais et le P&L passé des fonds) |
 | AM12 | Intervalles de confiance sur AUC et F1 | déjà fait : AUC avec intervalle de bootstrap par blocs dans l'analyse d'un run (sections « prédiction » et « robustesse », `analysis/sec_predict.py`, `sec_robust.py`) |
-| AM13 | Recherche Ctrl K élargie | à faire (lot 9) |
+| AM13 | Recherche Ctrl K élargie | fait (lot 9 : la palette Ctrl K cherche aussi les 749 notions du dictionnaire, les cours et les 300 derniers runs, index chargé à la première saisie) |
 | AM14 | Cliquet pyright sur les modules d'argent | fait (lots 2-3 : `fund/selection.py`, `core/perf.py`, `tracking/run_queries.py` ajoutés au cliquet pyright ; le reste des modules d'argent compte 316 erreurs, surtout des annotations de pandas) |
 | AM15 | Liste blanche testée des requêtes SQL assemblées | fait (lots 2-3 : les constructeurs relus filtrent déjà leurs noms ; liste fermée ajoutée aux ordres limite ; `tests/repo/test_sql_builders.py` refuse tout nouveau constructeur non relu) |
 | AM16 | Tests de propriété sur la fiscalité et les frais | fait (lots 2-3 : `tests/placements/test_tax_fee_properties.py`, hypothesis : impôt jamais négatif, jamais au-delà du gain hors PER, couple et durée jamais pénalisants, frais positifs et croissants, forfait exclusif) |
@@ -37,8 +37,8 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 | AM21 | Dependabot sur les versions figées | déjà fait : `.github/dependabot.yml` (pip et actions, chaque semaine) ; le fichier figé se régénère par `constraints-regen.yml` (B2) |
 | AM22 | Fusionner `feat/sync-en-clair` (ADR 0020) | déjà fait : ADR 0020 fusionnée le 13/11 (PR 72) ; la branche distante restante est un reste |
 | AM23 | Rotation des journaux | fait (lots 4-5 : la nuit compresse `nightly.log` au-delà de 300 Mo et garde 4 archives ; testé sur un faux journal) |
-| AM24 | Couverture anglaise mesurée | à faire (lot 9) |
-| AM25 | Erreurs de formulaire sur le champ concerné | à faire (lot 9) |
+| AM24 | Couverture anglaise mesurée | fait (lot 9 : mesurée à 100 % (6 042 libellés, aucun sans anglais ni recopié) ; `tests/webapp/test_i18n_coverage.py` garde cette couverture) |
+| AM25 | Erreurs de formulaire sur le champ concerné | fait (lot 9 : formulaire de lancement : une erreur « « Libellé » : … » s'affiche sous le champ, qui reçoit `aria-invalid` et le focus) |
 | AM26 | Phases de nuit indépendantes en parallèle | rien à changer : mesuré sur le journal réel, la nuit est dominée par les prédictions (étapes de 59 000 à 63 000 s) ; les autres étapes durent quelques minutes, les paralléliser ne gagnerait rien et chargerait les processeurs pendant les prédictions |
 | AM27 | Route `/healthz` | fait (lots 4-5 : `/healthz` : version du schéma de la base et du code, `server_too_old`, `migrations_pending`, worker vivant) |
 | AM28 | graphify à jour automatiquement | fait (lots 2-3 : crochet `.githooks/post-merge`, `graphify update .` en arrière-plan après un `git pull`) |
@@ -109,10 +109,10 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 | FO23 | Dividendes et détachements | déjà fait en partie : les dividendes versés entrent dans le P&L des positions des fonds (colonne `dividend` des cours) ; l'agenda des détachements reste à faire |
 | FO24 | Volatilité implicite | fait (lot 8 : volatilité implicite (VIX, VXN, RVX, VXD, GVZ, OVX, EVZ) à côté de la prévision HAR, rapport implicite / prévue, sur la fiche d'un actif) |
 | FO25 | Détecteur de paires cointégrées | fait (lot 8 : `patrick research pairs`, Engle-Granger, couverture, demi-vie, correction de Benjamini-Hochberg du nombre de paires) |
-| FO26 | Planification des lots par créneau | à faire (lot 9) |
-| FO27 | Assistant de lancement par objectif | à faire (lot 9) |
-| FO28 | Résumé du matin lisible sur téléphone | à faire (lot 9) |
-| FO29 | Mode démo sur base synthétique | à faire (lot 9) |
+| FO26 | Planification des lots par créneau | fait (lot 9 : « Démarrer à » dans la file : le worker attend l'heure choisie sans prendre de job ni compter d'inactivité ; `/api/queue/hold`) |
+| FO27 | Assistant de lancement par objectif | fait (lot 9 : `patrick launch-advice --minutes 30 [--target X]` : profil le plus approfondi dont la durée médiane réelle tient dans le temps donné) |
+| FO28 | Résumé du matin lisible sur téléphone | fait, réglage à toi (lot 9 : `patrick morning`, `patrick-matin.html` sans montant ni compte dans le dossier `morning_folder`, étape de nuit) |
+| FO29 | Mode démo sur base synthétique | fait (lot 9 : `patrick demo` : base synthétique dans son propre dossier et interface, sans toucher aux vraies données) |
 | FO30 | Sauvegarde hors site chiffrée | fait, mise en place à toi (lots 4-5 : `patrick storage offsite --to <dossier>` et `offsite-restore` : instantané, zstd ou gzip, AES-256-GCM, phrase dans `PATRICK_BACKUP_PASSPHRASE`, 3 copies gardées ; dépendance facultative `[backup]`) |
 
 ## Visuel (VI)

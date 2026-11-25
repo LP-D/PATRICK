@@ -562,6 +562,12 @@ def _worker_loop(pid: int, db_path: str, poll_interval: float, idle_timeout: flo
     idle_since = time.monotonic()
     print(f"[WORKER] started (pid={pid}, db={db_path})")
     while True:
+        from patrick.system import queue_hold
+        if queue_hold.held():                         # FO26 : file retenue jusqu'à l'heure choisie ; l'inactivité ne compte pas
+            jobs_db.write_heartbeat(conn, pid)
+            idle_since = time.monotonic()
+            time.sleep(max(poll_interval, 5.0))
+            continue
         job = jobs_db.claim_next_job(conn, pid)
         if job is None:
             jobs_db.write_heartbeat(conn, pid)

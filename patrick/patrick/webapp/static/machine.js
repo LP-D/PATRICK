@@ -312,6 +312,11 @@
         setQueueOpen(queueToggle.getAttribute("aria-expanded") !== "true");
     });
     clearQueueBtn.addEventListener("click", function () { queueRequest("/api/queue", { method: "DELETE" }); });
+    var holdInput = $("queue-hold-at");                 // FO26 : la file part à l'heure choisie (vide : tout de suite)
+    if (holdInput) holdInput.addEventListener("change", function () {
+        fetch("/api/queue/hold", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
+                                   body: JSON.stringify({ until: holdInput.value || null }) });
+    });
     var sortQueueBtn = $("sort-queue-btn");            // AM9 : paires sans champion puis champions les plus anciens d'abord
     if (sortQueueBtn) sortQueueBtn.addEventListener("click", function () { queueRequest("/api/queue/sort-urgency", { method: "POST" }); });
 

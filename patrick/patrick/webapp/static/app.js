@@ -267,7 +267,39 @@
 
     // --- bandeau d'erreurs de validation (soumission AJAX) ---
 
+    // AM25 (25/11) : une erreur qui nomme un champ (« Libellé » : …, forme des messages de webapp/forms.py) s'affiche aussi SOUS ce champ,
+    // qui reçoit aria-invalid et le focus ; le bandeau garde la liste complète.
+    function fieldForLabel(label) {
+        const norm = (s) => (s || "").replace(/\s+/g, " ").trim().toLowerCase();
+        const wanted = norm(label);
+        const labels = form ? form.querySelectorAll("label") : [];
+        for (const l of labels) {
+            const own = norm(Array.from(l.childNodes).filter((n) => n.nodeType === 3).map((n) => n.textContent).join(" "));
+            if (own && (own === wanted || own.startsWith(wanted))) {
+                return l.control || l.querySelector("input, select, textarea") || (l.htmlFor && document.getElementById(l.htmlFor));
+            }
+        }
+        return null;
+    }
+    function markFieldErrors(errors) {
+        let first = null;
+        (errors || []).forEach((e) => {
+            const m = /^«\s*(.+?)\s*»\s*:\s*(.+)$/.exec(e);
+            if (!m) return;
+            const field = fieldForLabel(m[1]);
+            if (!field) return;
+            field.setAttribute("aria-invalid", "true");
+            const note = document.createElement("span");
+            note.className = "field-error";
+            note.setAttribute("role", "alert");
+            note.textContent = m[2];
+            field.insertAdjacentElement("afterend", note);
+            if (!first) first = field;
+        });
+        return first;
+    }
     function showErrors(errors) {
+        clearFieldErrors();
         errorsList.innerHTML = "";
         (errors || []).forEach((e) => {
             const li = document.createElement("li");
@@ -275,12 +307,20 @@
             errorsList.appendChild(li);
         });
         errorsBanner.classList.remove("hidden");
-        errorsBanner.scrollIntoView({ behavior: "smooth", block: "start" });
+        const first = markFieldErrors(errors);
+        if (first) { first.focus({ preventScroll: true }); first.scrollIntoView({ behavior: "smooth", block: "center" }); }
+        else errorsBanner.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    function clearFieldErrors() {
+        document.querySelectorAll(".field-error").forEach((n) => n.remove());
+        document.querySelectorAll('[aria-invalid="true"]').forEach((n) => n.removeAttribute("aria-invalid"));
     }
 
     function clearErrors() {
         errorsBanner.classList.add("hidden");
         errorsList.innerHTML = "";
+        clearFieldErrors();
     }
 
     // --- suivi détaillé d'un run (progression/logs/résultats) ---
