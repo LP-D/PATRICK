@@ -173,6 +173,20 @@ def test_a_resumption_replays_the_snapshot_of_the_interrupted_run(db_path):
     conn.close()
 
 
+def test_a_resumption_replays_the_stored_config_of_the_interrupted_run(db_path):
+    """A14 : la reprise relit la configuration complétée par le premier lancement (même empreinte : Optuna et points de reprise)."""
+    conn = trackdb.connect(db_path)
+    _job(conn, "zo", _dead_pid())
+    _run(conn, "zo_run", "zo", snapshot="snapOLD")
+    with conn:
+        conn.execute("UPDATE run SET config_json = ? WHERE run_id = 'zo_run'", ('{"name": "stored"}',))
+    jobs_db.recover_interrupted_jobs(conn)
+    assert worker_module._resume_config(conn, "zo", "snapOLD") == '{"name": "stored"}'
+    assert worker_module._resume_config(conn, "zo", None) is None
+    assert worker_module._resume_config(conn, "zo", "snapNEW") is None
+    conn.close()
+
+
 def test_a_resumption_whose_snapshot_left_the_store_restarts_on_todays_data(monkeypatch):
     calls = []
 

@@ -87,6 +87,12 @@
         <label class="checkbox"><input type="checkbox" name="manual_price" id="f-manual-price"> {{ t('fund_field_manual_price') }}</label>
         <label>{{ t('fund_field_price') }} <input type="number" name="price" id="f-price" min="0" step="any" disabled></label>
       </div>
+      {# A12 : ordre limite (facultatif) : exécuté sur les séances suivantes quand le cours touche la limite, par tranches d'au plus 10 % du volume. #}
+      <div class="subgrid" data-kinds="equity etf cfd">
+        <label>{{ t('fund_field_limit') }} <input type="number" name="limit_price" id="f-limit" min="0" step="any"></label>
+        <label>{{ t('fund_field_limit_until') }} <input type="date" name="expires_on" id="f-limit-until" min="{{ today }}"></label>
+      </div>
+      <p class="hint">{{ t('fund_limit_hint') }}</p>
 
       <fieldset class="fund-choice">
         <legend>{{ t('fund_field_fees') }}</legend>

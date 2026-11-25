@@ -517,6 +517,14 @@ def run_all(conn: sqlite3.Connection, today: dt.date | None = None, needs_rl: bo
     """Un cycle pour chaque stratégie active dont le pilote est activé. Une erreur n'arrête pas les autres. `needs_rl` : True = seulement les fonds
     combinés qui lisent un agent RL (à lancer après `rl.live.refresh`), False = tous les autres, None = tous."""
     out: list[dict] = []
+    if needs_rl is not True:                       # A12 : les ordres limite en attente d'abord (une fois par nuit), puis les cycles
+        try:
+            from patrick.fund import limit_orders
+            for moved in limit_orders.resolve(conn, today=today):
+                logger.info("ordre limite %s (%s) : %s, %g exécuté(s)", moved["limit_id"], moved["symbol"], moved["status"],
+                            moved["filled_quantity"])
+        except Exception:                          # un ordre limite en échec n'empêche jamais les cycles des fonds
+            logger.exception("résolution des ordres limite en échec")
     for strategy in store.list_strategies(conn):
         stored = store.get_autopilot(conn, strategy["strategy_id"])
         if not stored or not stored.get("enabled"):
