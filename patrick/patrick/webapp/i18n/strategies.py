@@ -268,6 +268,7 @@ _SIMPLE: dict[str, tuple[str, str]] = {
     "st_psr_line": ("Sharpe probabiliste (vrai Sharpe > 0) : {p}", "Probabilistic Sharpe (true Sharpe > 0): {p}"),
     "st_dsr_line": ("Sharpe déflaté : {p} ({n} réglages essayés, seuil {s})", "Deflated Sharpe: {p} ({n} settings tried, threshold {s})"),
     "st_grid_h": ("Grille de sensibilité (Sharpe)", "Sensitivity grid (Sharpe)"),
+    "st_pbo_line": ("Probabilité de sur-apprentissage (PBO) : {p} sur {n} réglages et {b} tranches de temps. Vers 50 % ou plus, le meilleur réglage doit sa place au hasard.", "Probability of backtest overfitting (PBO): {p} over {n} settings and {b} time slices. Around 50% or more, the best setting owes its rank to chance."),
     "st_grid_line": ("Plateau : {p} des réglages atteignent au moins la moitié du meilleur Sharpe. Un pic isolé au milieu de valeurs médiocres est un signe de sur-ajustement ; la case encadrée est votre réglage.",
                      "Plateau: {p} of settings reach at least half the best Sharpe. An isolated peak among poor values signals overfitting; the framed cell is your setting."),
     "st_wf_h": ("Walk-forward de la grille", "Grid walk-forward"),
