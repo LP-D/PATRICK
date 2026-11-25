@@ -47,5 +47,22 @@
             load(el);
         });
     };
+    /* Formulaire `[data-lazy-form]` dans un fragment (hypothèse d'un DCF...) : un changement redemande le bloc avec ces réglages,
+       sans recharger la page. */
+    function reloadWith(form) {
+        var block = form.closest(".lazy-block");
+        if (!block) return;
+        var params = new URLSearchParams(new FormData(form)).toString();
+        block.dataset.lazyUrl = form.getAttribute("action") + (params ? "?" + params : "");
+        load(block);
+    }
+    document.addEventListener("change", function (e) {
+        var form = e.target.closest && e.target.closest("form[data-lazy-form]");
+        if (form) reloadWith(form);
+    });
+    document.addEventListener("submit", function (e) {
+        var form = e.target.closest && e.target.closest("form[data-lazy-form]");
+        if (form) { e.preventDefault(); reloadWith(form); }
+    });
     document.querySelectorAll("[data-lazy-url]").forEach(load);
 })();
