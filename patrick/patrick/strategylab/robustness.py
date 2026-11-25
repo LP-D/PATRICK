@@ -161,6 +161,30 @@ def deflated(r: np.ndarray, trial_sharpes_daily: np.ndarray) -> dict | None:
     return {"dsr": value, "trials": N, "sr0_annual": float(sr0 * math.sqrt(TD))}
 
 
+PBO_BLOCKS = 8
+
+
+def pbo_of(returns: pd.DataFrame, n_blocks: int = PBO_BLOCKS) -> dict | None:
+    """A20 (24/11) : probabilité de sur-apprentissage (Bailey, Borwein, López de Prado et Zhu 2017) de la grille de réglages. Le Sharpe de chaque
+    réglage sur `n_blocks` tranches de temps égales ; pour chaque moitié de tranches, le meilleur réglage « en échantillon » est-il au-dessus de
+    la médiane « hors échantillon » ? PBO = part des cas où non. Proche de 0,5 ou plus : le meilleur réglage doit sa place au hasard."""
+    from patrick.validation.pbo import compute_pbo
+
+    if returns.shape[1] < 2 or len(returns) < n_blocks * 20:
+        return None
+    blocks = np.array_split(np.arange(len(returns)), n_blocks)
+    matrix = np.full((returns.shape[1], n_blocks), np.nan)
+    for j, idx in enumerate(blocks):
+        part = returns.iloc[idx]
+        sd = part.std().replace(0, np.nan)
+        matrix[:, j] = (part.mean() / sd).to_numpy()
+    matrix = np.nan_to_num(matrix, nan=0.0)                     # tranche sans variation : Sharpe nul
+    out = compute_pbo(matrix)
+    pbo = out.get("pbo")
+    return {"pbo": None if pbo is None or not np.isfinite(pbo) else float(pbo), "n_trials": int(returns.shape[1]), "n_blocks": int(out.get("n_blocks", n_blocks)),
+            "n_combinations": int(out.get("n_combinations", 0))}
+
+
 def walk_forward(returns: pd.DataFrame, labels: list[str], min_train_years: int = 2) -> dict | None:
     """Sélection annuelle du meilleur réglage sur le passé seul (fenêtre croissante), appliqué l'année suivante."""
     if returns.shape[1] < 2:

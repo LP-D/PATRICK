@@ -10,36 +10,36 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 
 | # | Proposition | Statut |
 |---|---|---|
-| A1 | Prévision du niveau de volatilité (HAR, QLIKE) pour dimensionner les fonds | à faire |
+| A1 | Prévision du niveau de volatilité (HAR, QLIKE) pour dimensionner les fonds | fait (lot 7 : `fund/vol_forecast.py`, HAR-RV jugé en QLIKE ; pilote `vol_model = har` ; S&P 500 réel : gain QLIKE +29,7 %) |
 | A2 | DCC-GARCH dans `tracking/covariance.py` | à faire |
 | A3 | Variables GJR / APARCH / HAR dans le ML (option hors empreinte) | à faire |
 | A4 | Variables texte (ton banques centrales / actualités) dans l'entraînement | à faire |
-| A5 | Volatilité intrajournalière (Parkinson, Garman-Klass) | à faire |
+| A5 | Volatilité intrajournalière (Parkinson, Garman-Klass) | fait (lot 7 : variance de Garman-Klass ramenée à l'échelle clôture à clôture, dans la prévision HAR) |
 | A6 | Carry trade | à faire |
-| A7 | Cible alpha contre l'indice de référence | à faire |
+| A7 | Cible alpha contre l'indice de référence | déjà fait (`features/alpha_target.py`, cibles `target_kind = alpha` contre un indice de référence) |
 | A8 | Valorisation d'entreprise (multiples, puis DCF) | à faire |
 | A9 | Dimensionnement par bandit après frais | à faire |
 | A10 | RL : A2C / SAC / DQN comparés à PPO | à faire |
 | A11 | Brancher `research/phase9.py` sur les fonds | à faire |
 | A12 | Ordres limite et exécutions partielles | à faire |
-| A13 | Ordres manuels sur un fonds | à faire |
+| A13 | Ordres manuels sur un fonds | déjà fait (saisie d'un ordre ou d'une position à la main : « Nouvelle position », `/api/fund/strategies/{id}/orders`) ; « 0 ordre manuel » était un constat d'usage |
 | A14 | Reprise d'un run au niveau du scan | à faire |
-| A15 | Notifications Windows | à faire |
+| A15 | Notifications Windows | fait (lot 7 : notification Windows de fin de nuit s'il y a quelque chose à signaler, préférence `notify_night`) |
 | A16 | Rapport hebdomadaire PDF | à faire |
 | A17 | Calendrier économique superposé aux cours | à faire |
-| A18 | Bai-Perron et ARFIMA exact | à faire |
-| A19 | EVT pour la VaR des fonds | à faire |
-| A20 | PBO sur /strategies | à faire |
+| A18 | Bai-Perron et ARFIMA exact | fait en partie (lot 7 : Bai-Perron et d de Whittle local dans l'étude « racine unitaire ») ; ARFIMA exact par maximum de vraisemblance non fait |
+| A19 | EVT pour la VaR des fonds | fait (lot 7 : VaR et ES à 99 % par loi de Pareto généralisée, panneau d'un fonds) |
+| A20 | PBO sur /strategies | fait (lot 7 : PBO de la grille de réglages du laboratoire) |
 | A21 | Pipeline complet sur marches aléatoires | déjà fait (`tests/pipeline/test_null_world_validity.py`, `validity.yml` hebdomadaire) |
 | A22 | Ablation de Kalman (runs appariés) | à toi (runs du worker ; protocole ADR 0009) |
-| A23 | Monte-Carlo sur /placements | à faire |
+| A23 | Monte-Carlo sur /placements | déjà fait (`placements/projection.py` : milliers de trajectoires par bootstrap par blocs, quantiles et distribution) |
 | A24 | Import de relevés de courtier (CSV) | à faire |
-| A25 | Export Excel en un clic | à faire |
-| A26 | Page vitrine d'un fonds (HTML sans données personnelles) | à faire |
+| A25 | Export Excel en un clic | fait (lot 7 : `/api/export/patrick.xlsx`, liens sur /predictions et /fonds) |
+| A26 | Page vitrine d'un fonds (HTML sans données personnelles) | fait (lot 7 : page vitrine HTML autonome, pourcentages seulement) |
 | A27 | Questions en langage naturel sur un run (`llm_guard`) | à faire |
-| A28 | Comparaisons limitées à un même profil | à faire |
-| A29 | Test de restauration automatique de la sauvegarde | à faire |
-| A30 | Parité de risque pour les fonds combinés | à faire |
+| A28 | Comparaisons limitées à un même profil | fait (lot 7 : l'onglet « Comparer » restreint la liste à la cible ; la comparaison signalait déjà des profils différents) |
+| A29 | Test de restauration automatique de la sauvegarde | fait (lot 7 : `patrick storage verify-backup`, étape de nuit ; vraie sauvegarde du 24/11 restaurable, 116 s) |
+| A30 | Parité de risque pour les fonds combinés | fait (lot 7 : `fund/risk_parity.py`, pilote `weighting = risk_parity`) |
 
 ## B. Améliorations
 
@@ -122,7 +122,7 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | D5 | Petits multiples par classe d'actifs | déjà fait de fait (pages de classes d'actifs : un panneau avec graphique par actif) |
 | D6 | Holdout et réel côte à côte | déjà fait (tableau test / holdout / réel côte à côte de l'aperçu d'un run, section holdout_live) |
 | D7 | Badge « biais du gagnant » | fait (lot 6 : bandeau du biais du gagnant) |
-| D8 | Volatilité séparée des directions | à faire avec A1 (la prévision de volatilité s'affichera à part, jamais dans un classement de directions) |
+| D8 | Volatilité séparée des directions | fait (lot 7 : section « Volatilité prévue : une taille de position, pas une direction » à part des signaux) |
 | D9 | Diagramme de fiabilité | déjà fait (section « calibration » de l'analyse d'un run) |
 | D10 | Carte de chaleur cible × horizon | fait (lot 6 : carte de chaleur cible × horizon de l'AUC regroupée sur la Synthèse) |
 | D11 | P&L avant / après frais superposés | déjà fait (graphique d'un fonds : valeur nette et valeur avant frais en pointillés) |

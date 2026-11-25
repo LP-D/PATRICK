@@ -26,6 +26,7 @@
     {% if fiche.context %}<a href="#contexte">{{ t('eq_context_h') }}</a>{% endif %}
     <a href="#signaux">{{ t('as_signals_h') }}</a>
     <a href="#champions">{{ t('ch_title') }}</a>
+    <a href="#volatilite">{{ t('vf_nav') }}</a>
     <a href="#actualites">{{ t('as_news_h') }}</a>
     <a href="#fonds">{{ t('as_funds_h') }}</a>
     <a href="#entrainements">{{ t('as_runs_h') }}</a>
@@ -50,6 +51,11 @@
 <section id="signaux" class="card">
     <h2>{{ t('as_signals_h') }}</h2>
     {{ lazy_block('/fragments/asset-signals/' ~ (target | urlencode), 4, t('sb_loading'), t('lazy_retry')) }}
+</section>
+
+<section id="volatilite" class="card">
+    <h2>{{ t('vf_title') }}</h2>
+    {{ lazy_block('/fragments/vol-forecast/' ~ (target | urlencode), 3, t('sb_loading'), t('lazy_retry')) }}
 </section>
 
 <section id="champions" class="card">

@@ -834,6 +834,7 @@
                 });
                 parts.push(h("div", { class: "table-scroll" }, [h("table", { class: "data-table st-grid" }, [h("thead", {}, [head]), h("tbody", {}, rowsG)])]));
                 parts.push(hint(t("st_grid_line", { p: g.plateau === null ? "—" : pct(g.plateau, 0) })));
+                if (g.pbo && g.pbo.pbo !== null) parts.push(hint(t("st_pbo_line", { p: pct(g.pbo.pbo, 0), n: g.pbo.n_trials, b: g.pbo.n_blocks })));
             }
             if (g.walk_forward) {
                 var wf = g.walk_forward;

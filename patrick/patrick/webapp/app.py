@@ -24,7 +24,13 @@ from fastapi.exception_handlers import (
     http_exception_handler as default_http_exception_handler,
 )
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
@@ -1293,8 +1299,11 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
                    started_after: date | None = None, started_before: date | None = None,
                    min_duration_s: float | None = Query(default=None, ge=0),
                    max_duration_s: float | None = Query(default=None, ge=0),
-                   ordre: str | None = None, mesure: str | None = None):
+                   ordre: str | None = None, mesure: str | None = None, compare: str | None = None):
     """Phase 7.1 — full run-history explorer.
+
+    `compare=<run_id>` (onglet « Comparer » de la page d'un run, A28) : sans cible choisie, la liste se restreint d'office à la cible de ce run
+    (comparer un modèle de l'or à un modèle du CAC n'apprend rien) ; la page de comparaison signale ensuite des profils différents.
 
     Deux vues sur la même page : la liste des runs (défaut) et, avec `vue=analyses`, les analyses transverses (carte cible × horizon, scores
     par algorithme, nuage RL — ancienne page `/analyses`, dessinées par `analyses_hub.js`).
@@ -1312,6 +1321,9 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
         raise HTTPException(status_code=400, detail="La durée minimale dépasse la durée maximale.")
     conn = trackdb.connect()
     try:
+        if compare and not target:
+            row = conn.execute("SELECT target FROM run WHERE run_id = ?", (compare,)).fetchone()
+            target = row[0] if row else None
         index = trackdb.list_run_index(conn)
         every = {"ml": [r for r in index if r["family"] != "dl"], "dl": [r for r in index if r["family"] == "dl"], "rl": _rl_history_rows()}
         if vue == "analyses":
@@ -2224,6 +2236,44 @@ def _asset_overview_from_snapshot(symbol: str) -> dict | None:
                           "kind": overview["kind"], "n_alpha": overview["n_alpha"]}
                 return _refresh_time_dependent(single, utc_now())
     return None
+
+
+@app.get("/api/export/patrick.xlsx")
+def export_xlsx():
+    """Classeur Excel (A25) : dernières prédictions des champions, champions, fonds. Lecture seule."""
+    from patrick.fund import service
+    from patrick.webapp import excel_export
+    conn = trackdb.connect()
+    try:
+        data = excel_export.workbook_bytes(conn, service.current_date())
+    finally:
+        conn.close()
+    name = f"patrick-{utc_today().isoformat()}.xlsx"
+    return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+@app.get("/fragments/vol-forecast/{symbol}")
+def vol_forecast_fragment(request: Request, symbol: str):
+    """Volatilité prévue d'un actif (A1, D8) : HAR-RV du lendemain contre la volatilité glissante, jugés en QLIKE. Une TAILLE de position,
+    jamais une direction : affichée à part des signaux."""
+    import pandas as pd
+
+    from patrick.fund import vol_forecast
+    source = forms.TARGET_SOURCE_BY_SYMBOL.get(symbol)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Cible inconnue")
+    hist = market_data.price_history(symbol, source, "5y")
+    out = None
+    if hist.get("closes"):
+        df = pd.DataFrame({"close": hist["closes"]}, index=pd.to_datetime(hist["dates"]))
+        for key, col in (("opens", "open"), ("highs", "high"), ("lows", "low")):
+            if hist.get(key) and len(hist[key]) == len(df):
+                df[col] = pd.to_numeric(pd.Series(hist[key], index=df.index), errors="coerce")
+        forecast = vol_forecast.har_sigma(df)
+        if forecast:
+            out = {**forecast, "eval": vol_forecast.evaluate(df), "ohlc": {"open", "high", "low"}.issubset(df.columns)}
+    return templates.TemplateResponse(request, "_vol_forecast.html", {**_i18n_context(request), "vf": out})
 
 
 @app.get("/fragments/pooled-heatmap")

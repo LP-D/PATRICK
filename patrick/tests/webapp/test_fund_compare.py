@@ -40,3 +40,18 @@ def test_the_panel_offers_the_comparison_select(client, tmp_path):
     conn.close()
     html = client.get(f"/api/fund/strategies/{sid}/panel").text
     assert 'id="fund-compare-select"' in html and f'data-self="{sid}"' in html and 'id="fund-chart-dd"' in html
+
+
+def test_the_showcase_page_is_standalone_and_publishes_no_amount(client, tmp_path):
+    """A26 : HTML autonome (aucun script ni ressource externe), pourcentages seulement, jamais le capital ni une valeur en euros."""
+    conn = trackdb.connect(str(tmp_path / "patrick.db"))
+    sid = store.create_strategy(conn, "Fonds Vitrine", "CTO", 123_456, "2026-01-05")
+    conn.close()
+
+    resp = client.get(f"/api/fund/strategies/{sid}/vitrine.html")
+
+    assert resp.status_code == 200 and "attachment" in resp.headers["content-disposition"]
+    page = resp.text
+    assert "Fonds Vitrine" in page and "<svg" in page and "recommandation" in page
+    assert "<script" not in page and "http" not in page.replace("http://www.w3.org/2000/svg", "")
+    assert "123" not in page.replace(" ", "") and "€" not in page

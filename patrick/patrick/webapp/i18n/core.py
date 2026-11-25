@@ -143,6 +143,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "queue_frise_aria": {"fr": "Frise de la file : run en cours puis runs en attente, largeur selon la durée estimée",
                          "en": "Queue timeline: current run then queued runs, width by estimated duration"},
     "queue_frise_unknown": {"fr": "sans estimation", "en": "no estimate"},
+    "export_xlsx": {"fr": "Exporter en Excel", "en": "Export to Excel"},
     "queue_eta_tip": {"fr": "Reste du run en cours + durée moyenne, étape par étape, des runs passés aux mêmes réglages (hors veille et pauses).",
                       "en": "Rest of the current run + step-by-step average duration of past runs with the same settings (sleep and pauses excluded)."},
     "queue_item_eta_tip": {"fr": "Moyenne de {n} run(s) passé(s), {basis}", "en": "Average of {n} past run(s), {basis}"},

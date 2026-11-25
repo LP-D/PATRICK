@@ -278,7 +278,8 @@ def run_grid(m: indicators.Market, s: dict, costs: backtest.Costs, axes: list[tu
     if valid:
         best = max(c["sharpe"] for c in valid)
         plateau = float(np.mean([c["sharpe"] >= 0.5 * best for c in valid])) if best > 0 else 0.0
-    return {"axes": [{"param": n, "values": v} for n, v in axes], "cells": cells, "walk_forward": wf, "plateau": plateau,
+    pbo = robustness.pbo_of(frame) if len(frame.columns) >= 2 else None
+    return {"axes": [{"param": n, "values": v} for n, v in axes], "cells": cells, "walk_forward": wf, "plateau": plateau, "pbo": pbo,
             "_daily_sharpes": daily_sr}
 
 

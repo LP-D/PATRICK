@@ -47,6 +47,9 @@ logger = logging.getLogger("patrick.fund.autopilot")
 MANAGER = "autopilot"
 MAX_GROSS = 2.0
 VOL_WINDOW = 60                  # séances de la volatilité qui pondère les cibles
+VOL_MODELS = ("trailing", "har")  # volatilité glissante, ou prévision HAR du lendemain (`fund/vol_forecast.py`, A1)
+WEIGHTINGS = ("inverse_vol", "risk_parity")
+RISK_PARITY_WINDOW = 250          # séances de rendements communs pour la covariance de la parité de risque
 SIZING_TOLERANCE = 0.10          # une taille ne change que si le budget a bougé de plus de 10 %
 
 LABELS = {
@@ -72,6 +75,8 @@ class Settings:
     max_drawdown: float | None = None                # repli sous le plus haut au-delà duquel le pilote n'ouvre plus rien (None = sans arrêt)
     min_position: float | None = None                # € : taille minimale d'une position ; les modèles les moins bien classés qui n'y atteignent pas sont écartés (None = aucune)
     combo: dict | None = None                        # fonds de test combiné (`fund/combo.py`) : {rl, vol, cost_multiple} ; None = signal de direction brut
+    vol_model: str = "trailing"                      # volatilité qui dimensionne : « trailing » (60 séances) ou « har » (prévision HAR, A1)
+    weighting: str = "inverse_vol"                   # « inverse_vol » (corrélations ignorées) ou « risk_parity » (contributions égales, A30)
 
     @classmethod
     def from_dict(cls, raw: dict | None) -> Settings:
@@ -101,14 +106,20 @@ class Settings:
             minimum = _number(minimum, "min_position")
             if minimum <= 0:
                 raise store.FundError("min_position invalide : montant strictement positif attendu, ou vide")
+        vol_model = raw.get("vol_model", base.vol_model)
+        if vol_model not in VOL_MODELS:
+            raise store.FundError(f"vol_model invalide : {', '.join(VOL_MODELS)} attendu")
+        weighting = raw.get("weighting", base.weighting)
+        if weighting not in WEIGHTINGS:
+            raise store.FundError(f"weighting invalide : {', '.join(WEIGHTINGS)} attendu")
         return cls(selection=selection.Policy.from_dict(raw), gross=gross, allow_short=allow_short,
                    min_confidence=confidence, max_class_share=share, max_drawdown=drawdown, min_position=minimum,
-                   combo=combo_mod.check_settings(raw.get("combo")))
+                   combo=combo_mod.check_settings(raw.get("combo")), vol_model=vol_model, weighting=weighting)
 
     def to_dict(self) -> dict:
         return {**self.selection.to_dict(), "gross": self.gross, "allow_short": self.allow_short,
                 "min_confidence": self.min_confidence, "max_class_share": self.max_class_share, "max_drawdown": self.max_drawdown,
-                "min_position": self.min_position, "combo": self.combo}
+                "min_position": self.min_position, "combo": self.combo, "vol_model": self.vol_model, "weighting": self.weighting}
 
 
 def _number(value, name: str) -> float:
@@ -169,11 +180,17 @@ def _instrument_for(symbol: str, wrapper: str, settings: Settings, groups: dict[
     return {"kind": "cfd", "symbol": sym, "spec": {}}, settings.allow_short, None
 
 
-def _volatility(conn: sqlite3.Connection, symbol: str, today: dt.date) -> float | None:
-    """σ des rendements des `VOL_WINDOW` dernières séances connues à `today` (jamais le futur), ou None sans cotation."""
+def _volatility(conn: sqlite3.Connection, symbol: str, today: dt.date, model: str = "trailing") -> float | None:
+    """σ des rendements des `VOL_WINDOW` dernières séances connues à `today` (jamais le futur), ou None sans cotation. `model="har"` : la
+    volatilité PRÉVUE pour le lendemain par un HAR-RV (`fund/vol_forecast.py`), repli sur la glissante si l'historique ne suffit pas."""
     df = prices.ensure_bars(conn, symbol).df
     if df is None or df.empty:
         return None
+    if model == "har":
+        from patrick.fund import vol_forecast
+        forecast = vol_forecast.har_sigma(df, pd.Timestamp(today))
+        if forecast and math.isfinite(forecast["sigma"]) and forecast["sigma"] > 0:
+            return forecast["sigma"]
     close = df["close"].dropna()
     close = close[close.index <= pd.Timestamp(today)]
     vol = float(close.pct_change().dropna().tail(VOL_WINDOW).std()) if len(close) > 2 else float("nan")
@@ -203,11 +220,30 @@ def _reject(excluded: list[dict], model: dict, code: str, detail: str | None = N
                      "detail": detail or LABELS[code]})
 
 
-def _weights(priced: list[dict], settings: Settings) -> dict[int, float]:
-    """Poids de chaque modèle (clé : `id(modèle)`) : volatilité inverse de sa cible, partagée entre les horizons de la cible, puis plafond par
+def _returns_matrix(conn: sqlite3.Connection, targets: list[str], today: dt.date) -> pd.DataFrame:
+    """Rendements quotidiens des cibles jusqu'à `today` (jamais après), `RISK_PARITY_WINDOW` dernières séances."""
+    cols = {}
+    for target in targets:
+        df = prices.ensure_bars(conn, target).df
+        if df is None or df.empty:
+            continue
+        close = df["close"].dropna()
+        cols[target] = close[close.index <= pd.Timestamp(today)].pct_change()
+    return pd.DataFrame(cols).iloc[-RISK_PARITY_WINDOW:]
+
+
+def _weights(priced: list[dict], settings: Settings, returns: pd.DataFrame | None = None) -> dict[int, float]:
+    """Poids de chaque modèle (clé : `id(modèle)`) : volatilité inverse de sa cible (ou, `weighting="risk_parity"`, contributions au risque
+    égales entre cibles, corrélations comprises : `fund/risk_parity.py`), partagée entre les horizons de la cible, puis plafond par
     classe d'actifs : le poids d'une classe au-dessus de `max_class_share` est ramené au plafond, sans être redistribué (l'exposition brute baisse
     d'autant : c'est le sens d'un plafond de risque)."""
-    inverse = {target: 1.0 / next(m["vol"] for m in priced if m["target"] == target) for target in {m["target"] for m in priced}}
+    targets = sorted({m["target"] for m in priced})
+    inverse = {target: 1.0 / next(m["vol"] for m in priced if m["target"] == target) for target in targets}
+    if settings.weighting == "risk_parity" and returns is not None and len(targets) > 1 and set(targets) <= set(returns.columns):
+        from patrick.fund import risk_parity
+        cov = risk_parity.shrunk_cov(returns[targets])
+        if cov is not None:
+            inverse = dict(zip(targets, risk_parity.erc_weights(cov), strict=True))
     total, per_target = sum(inverse.values()), {t: sum(1 for m in priced if m["target"] == t) for t in inverse}
     weights = {id(m): inverse[m["target"]] / total / per_target[m["target"]] for m in priced}
     classes = {id(m): classify_asset_class(m["target"]) for m in priced}
@@ -232,13 +268,15 @@ def build_plan(conn: sqlite3.Connection, strategy: dict, settings: Settings, tod
         if instrument is None:
             _reject(excluded, model, why)
             continue
-        vol = _volatility(conn, model["target"], today)
+        vol = _volatility(conn, model["target"], today, settings.vol_model)
         unit = _unit_notional(conn, strategy["strategy_id"], instrument["symbol"], today) if instrument["kind"] == "cfd" else None
         if vol is None or (instrument["kind"] == "cfd" and unit is None):
             _reject(excluded, model, "no_quotes")
             continue
         priced.append({**model, "instrument": instrument, "allow_short": allow_short, "vol": vol, "unit_notional": unit})
-    weights = _weights(priced, settings)
+    returns = (_returns_matrix(conn, sorted({m["target"] for m in priced}), today)
+               if settings.weighting == "risk_parity" and len({m["target"] for m in priced}) > 1 else None)
+    weights = _weights(priced, settings, returns)
     if settings.min_position is not None and priced:
         # Taille minimale d'une position (frais forfaitaires par ordre : un fonds de quelques milliers d'euros ne peut pas suivre tous les signaux).
         # D'abord le plafond arithmétique (budget / minimum), puis, les poids n'étant pas égaux, on retire le modèle le moins bien classé
@@ -248,10 +286,10 @@ def build_plan(conn: sqlite3.Connection, strategy: dict, settings: Settings, tod
         for model in priced[keep:]:
             _reject(excluded, model, "min_size", f"{keep} position(s) au plus de {settings.min_position:g} € au moins avec {budget:,.0f} €".replace(",", " "))
         priced = priced[:keep]
-        weights = _weights(priced, settings)
+        weights = _weights(priced, settings, returns)
         while len(priced) > 1 and any(budget * w < settings.min_position for w in weights.values()):
             _reject(excluded, priced.pop(), "min_size", f"poids trop faible pour atteindre {settings.min_position:g} € (budget {budget:,.0f} €)".replace(",", " "))
-            weights = _weights(priced, settings)
+            weights = _weights(priced, settings, returns)
     selected = []
     for model in priced:
         weight = weights[id(model)]

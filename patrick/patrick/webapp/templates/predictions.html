@@ -11,6 +11,7 @@
     {{ help_icon('prediction_overview', t('pb_last'), t('glossary_open_aria', term=t('pb_last'))) }}
     {{ help_icon('live_reliability', t('pred_live_reliability'), t('glossary_open_aria', term=t('pred_live_reliability'))) }}
 </h1>
+<p class="row"><a class="btn-secondary" href="/api/export/patrick.xlsx" download>{{ t('export_xlsx') }}</a></p>
 <nav class="kind-tabs" aria-label="{{ t('kind_tabs_label') }}">
     <a href="/predictions" class="kind-tab{% if kind != 'alpha' %} active{% endif %}">{{ t('kind_directional') }}</a>
     <a href="/predictions?kind=alpha" class="kind-tab{% if kind == 'alpha' %} active{% endif %}">{{ t('kind_alpha') }} <span class="kind-count">{{ n_alpha }}</span></a>

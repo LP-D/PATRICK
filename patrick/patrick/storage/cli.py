@@ -120,6 +120,29 @@ def analyze_cmd(limit: int = typer.Option(1000, "--limit", help="Lignes examiné
         conn.close()
 
 
+@storage_app.command(name="verify-backup")
+def verify_backup_cmd(full: bool = typer.Option(False, "--full", help="Ajoute PRAGMA quick_check (relit tout le fichier : plusieurs minutes)")) -> None:
+    """Vérifie que la sauvegarde la plus récente se restaure (A29) : lecture seule absolue, schéma, tables clés comparées à la base vivante,
+    dernières prédictions relues. Sans danger avec un worker vivant (rien n'est écrit). Code de sortie 1 si un contrôle échoue."""
+    from patrick.tracking import backup_verify
+    from patrick.tracking import db as trackdb
+
+    path = backup_verify.latest_backup()
+    if path is None:
+        typer.echo("[BACKUP] aucune sauvegarde complète trouvée.")
+        raise typer.Exit(code=1)
+    live = trackdb.connect()
+    try:
+        report = backup_verify.verify(path, live, full=full)
+    finally:
+        live.close()
+    for c in report["checks"]:
+        typer.echo(f"  {'OK ' if c['ok'] else 'KO '} {c['name']:<20} {c['detail']}")
+    typer.echo(f"[BACKUP] {path.name} : {'restaurable' if report['ok'] else 'PROBLÈME'}")
+    if not report["ok"]:
+        raise typer.Exit(code=1)
+
+
 @storage_app.command(name="compress-caches")
 def compress_caches_cmd(limit: int = typer.Option(0, "--limit", help="Nombre maximal d'entrées à compresser (0 : toutes)")) -> None:
     """Compresse (zlib, sans perte) les entrées en clair de `vol_model_cache` (~26 Go sur 31 : environ 2,3 fois plus petit)."""

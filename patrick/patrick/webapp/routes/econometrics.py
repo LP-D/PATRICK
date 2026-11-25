@@ -230,6 +230,13 @@ def run_study(study: str, prep: Prepared, p: Params, start: str | None, end: str
             out["variance_ratio"] = {"error": str(exc)}
         h = S.hurst_exponent(pd.Series(np.cumsum(x.to_numpy())))
         out["hurst"] = {"value": h, "label": S._hurst_label(h)}
+        # A18 : ruptures multiples de moyenne et d de Whittle local
+        from patrick.econometrics import breaks as B
+        for key, fn in (("bai_perron", B.bai_perron), ("whittle", B.local_whittle_d)):
+            try:
+                out[key] = fn(x)
+            except ValueError as exc:
+                out[key] = {"error": str(exc)}
         return S.clean(out)
     if study == "dependence":
         return SE.dependence_summary(x, p.int("nlags", 20, 5, 60))

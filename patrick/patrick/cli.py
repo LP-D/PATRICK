@@ -442,6 +442,27 @@ def audit_signal_cmd(
         typer.echo(f"  q={row['q_value']:.3f}  AUC {row['auc']:.3f}  {row['target']} h={row['horizon']}  ({row['n_runs']} run(s))")
 
 
+@app.command(name="notify-night")
+def notify_night_cmd(dry_run: bool = typer.Option(False, "--dry-run", help="Affiche le résumé sans notification")) -> None:
+    """Fin de nuit (A15) : notification Windows si la nuit a échoué ou été partielle, si des champions ont été remplacés ou si des fonds sont
+    à l'arrêt sur leur seuil de perte. Rien sans histoire ; désactivable (préférence notify_night). Ne fait jamais échouer la nuit."""
+    from patrick.desktop import prefs
+    from patrick.system import night_status, notify
+    from patrick.tracking import db as trackdb
+
+    conn = trackdb.connect()
+    try:
+        lines = notify.night_summary(conn, night_status.night_status())
+    finally:
+        conn.close()
+    if not lines:
+        typer.echo("[NOTIFY] rien à signaler.")
+        return
+    typer.echo("[NOTIFY] " + " ".join(lines))
+    if not dry_run and prefs.get_bool(prefs.KEY_NOTIFY_NIGHT):
+        notify.toast("PATRICK : nuit à regarder", " ".join(lines))
+
+
 @audit_app.command(name="fx-gap")
 def audit_fx_gap_cmd(
     horizon: int = typer.Option(1, "--horizon", help="Horizon des runs de change comparés"),
