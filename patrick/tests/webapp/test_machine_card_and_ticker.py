@@ -60,7 +60,7 @@ def test_the_right_column_is_its_own_stack_not_rows_shared_with_the_settings_cel
     side = html.index('<div class="station-side">')
     assert html.index('class="dash-panel dash-settings"') < side < html.index('class="dash-panel dash-progress"')
     assert side < html.index('class="dash-panel dash-machine"')
-    css = client.get("/static/patrick.css").text
+    css = (client.get("/static/patrick.css").text + "\n" + client.get("/static/patrick-pages.css").text)
     assert ".station-side { grid-column: 2; display: flex; flex-direction: column;" in css
 
 
@@ -155,7 +155,7 @@ def test_pages_still_render_when_the_server_predates_the_ticker(client, monkeypa
 
 
 def test_the_ticker_animation_stops_on_hover_and_for_reduced_motion(client):
-    css = client.get("/static/patrick.css").text
+    css = (client.get("/static/patrick.css").text + "\n" + client.get("/static/patrick-pages.css").text)
     assert "@keyframes ticker-scroll" in css and "animation-play-state: paused" in css
     assert re.search(r"prefers-reduced-motion: reduce\)\s*\{\s*\.ticker-track\s*\{\s*animation:\s*none", css)
     assert "--ticker-dir: reverse" in css                                         # gauche -> droite, inversable en une ligne
@@ -163,7 +163,7 @@ def test_the_ticker_animation_stops_on_hover_and_for_reduced_motion(client):
 
 def test_the_ticker_stays_on_screen_while_the_page_scrolls(client):
     """Collé en haut, sur toutes les pages : la barre du haut et tout ce qui se colle dessous se décalent de sa hauteur."""
-    css = client.get("/static/patrick.css").text
+    css = (client.get("/static/patrick.css").text + "\n" + client.get("/static/patrick-pages.css").text)
     ticker_rule = css[css.index("\n.ticker {"):css.index("\n.ticker[hidden]")]
     assert "position: sticky" in ticker_rule and "top: 0" in ticker_rule
     assert ":root:has(.ticker:not([hidden])) { --ticker-h: 33px; }" in css

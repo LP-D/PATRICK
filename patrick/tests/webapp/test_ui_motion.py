@@ -12,7 +12,7 @@ from patrick.tracking import db
 from patrick.webapp.app import BASE_DIR, app
 
 STATIC = BASE_DIR / "static"
-CSS = (STATIC / "patrick.css").read_text(encoding="utf-8")
+CSS = "\n".join((STATIC / n).read_text(encoding="utf-8") for n in ("patrick.css", "patrick-pages.css"))
 MOTION_JS = (STATIC / "motion.js").read_text(encoding="utf-8")
 
 

@@ -55,7 +55,7 @@ def test_split_page_is_listed_in_the_sidebar_and_translated(tmp_path, monkeypatc
 def test_pages_embedded_in_a_pane_hide_the_application_chrome():
     base = (ROOT / "patrick" / "webapp" / "templates" / "base_v2.html").read_text(encoding="utf-8")
     assert 'window.top.location.pathname === "/split"' in base and 'setAttribute("data-embed"' in base
-    css = (STATIC / "patrick.css").read_text(encoding="utf-8")
+    css = "\n".join((STATIC / n).read_text(encoding="utf-8") for n in ("patrick.css", "patrick-pages.css"))
     assert ':root[data-embed] .sidebar' in css and ':root[data-embed] .topbar' in css
 
 

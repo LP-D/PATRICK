@@ -137,7 +137,7 @@ def test_topbar_groups_secondary_buttons_in_an_overflow_menu(client):
         assert hook in menu, hook
     # la palette (loupe) et l'épingle restent dans la barre, avant le bouton du menu
     assert bar.index('id="pin-toggle"') < bar.index('id="cmdk-open"') < bar.index('id="topbar-more-btn"')
-    css = (BASE_DIR / "static" / "patrick.css").read_text(encoding="utf-8")
+    css = "\n".join((BASE_DIR / "static" / n).read_text(encoding="utf-8") for n in ("patrick.css", "patrick-pages.css"))
     assert re.search(r"\.topbar-more\s*\{\s*display:\s*contents", css)
     assert "#nav-vocabulary, #nav-settings, #nav-diagnostics { display: none; }" not in css   # plus aucun bouton retiré sans recours
     assert "topbar-more-btn" in (BASE_DIR / "static" / "shell.js").read_text(encoding="utf-8")
@@ -146,7 +146,7 @@ def test_topbar_groups_secondary_buttons_in_an_overflow_menu(client):
 def test_topbar_trail_keeps_its_room_on_a_narrow_desktop():
     """1024 px, rail ouvert : la loupe gardait 280 px et le fil de localisation tombait à 1 px, son texte passant sous la puce. Les
     libellés de la loupe et de la puce se replient (une ligne visible) et les actions cèdent leur place avant le fil."""
-    css = (BASE_DIR / "static" / "patrick.css").read_text(encoding="utf-8")
+    css = "\n".join((BASE_DIR / "static" / n).read_text(encoding="utf-8") for n in ("patrick.css", "patrick-pages.css"))
 
     def rule(selector: str) -> str:
         start = css.index("\n" + selector + " {")

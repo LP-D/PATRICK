@@ -15,7 +15,7 @@ from patrick.webapp.i18n import core as i18n
 WEBAPP = Path(i18n.__file__).resolve().parents[1]
 JS = (WEBAPP / "static" / "help.js").read_text(encoding="utf-8")
 GLOSSARY_JS = (WEBAPP / "static" / "glossary.js").read_text(encoding="utf-8")
-CSS = (WEBAPP / "static" / "patrick.css").read_text(encoding="utf-8")
+CSS = "\n".join((WEBAPP / "static" / n).read_text(encoding="utf-8") for n in ("patrick.css", "patrick-pages.css"))
 
 
 @pytest.fixture(autouse=True)

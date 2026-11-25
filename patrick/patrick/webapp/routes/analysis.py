@@ -221,7 +221,7 @@ def register(app: FastAPI, templates, context) -> None:
         ctx = context(request)
         scripts = _ML_SCRIPTS if info["mode"] == "ml" else _RL_SCRIPTS
         js = "\n".join((STATIC / name).read_text(encoding="utf-8") for name in scripts)
-        css = "\n".join((STATIC / name).read_text(encoding="utf-8") for name in ("patrick.css", "analysis.css"))
+        css = "\n".join((STATIC / name).read_text(encoding="utf-8") for name in ("patrick.css", "patrick-pages.css", "analysis.css"))
         embed = json.dumps(data or {}, ensure_ascii=False).replace("<", "\\u003c")        # jamais de « </script » ni de « <!-- » dans la page
         i18n_js = i18n.js_strings(ctx["lang"], f"/runs/{run_id}/analyse")
         page = templates.get_template("run_analysis_export.html").render(
