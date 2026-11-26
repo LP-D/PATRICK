@@ -99,6 +99,57 @@ def register(app: FastAPI, templates, i18n_context) -> None:
         return templates.TemplateResponse(request, "_pooled_heatmap.html", {**i18n_context(request), "grid": grid})
 
 
+    @app.get("/api/chart-notes/{symbol}")
+    def chart_notes_list(symbol: str):
+        """VI24 (26/11) : notes libres datées posées sur la courbe d'un actif."""
+        from patrick.tracking import chart_notes
+        conn = trackdb.connect()
+        try:
+            return {"notes": chart_notes.list_notes(conn, symbol)}
+        finally:
+            conn.close()
+
+    @app.post("/api/chart-notes/{symbol}")
+    async def chart_notes_add(request: Request, symbol: str):
+        from patrick.tracking import chart_notes
+        if symbol not in forms.TARGET_SOURCE_BY_SYMBOL:
+            raise HTTPException(status_code=404, detail="Cible inconnue")
+        try:
+            body = await request.json()
+        except ValueError:
+            body = None
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="Corps JSON attendu.")
+        conn = trackdb.connect()
+        try:
+            return chart_notes.add_note(conn, symbol, body.get("day"), body.get("text"))
+        except chart_notes.NoteError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        finally:
+            conn.close()
+
+    @app.delete("/api/chart-notes/{symbol}/{note_id}")
+    def chart_notes_delete(symbol: str, note_id: int):
+        from patrick.tracking import chart_notes
+        conn = trackdb.connect()
+        try:
+            return {"deleted": chart_notes.delete_note(conn, note_id)}
+        finally:
+            conn.close()
+
+    @app.get("/fragments/run-funnel/{run_id}")
+    def run_funnel_fragment(request: Request, run_id: str):
+        """VI8 (26/11) : entonnoir de sélection des variables du modèle retenu d'un run (métadonnées du modèle exporté)."""
+        from patrick.analysis import feature_funnel
+        from patrick.tracking import champions
+        conn = trackdb.connect()
+        try:
+            trial = champions.best_trial(conn, run_id) or {}
+        finally:
+            conn.close()
+        out = feature_funnel.funnel(champions.model_meta(trial.get("artifact_path")))
+        return templates.TemplateResponse(request, "_run_funnel.html", {**i18n_context(request), "funnel": out})
+
     @app.get("/fragments/model-set/{symbol}")
     def model_set_fragment(request: Request, symbol: str):
         """FO1/FO2 (25/11) : ensemble de confiance de modèles (MCS) et test SPA de chaque horizon à champion de l'actif."""

@@ -19,6 +19,8 @@ HEALTH_STRINGS: dict[str, dict[str, str]] = {
     "hl_night_when": _s("Commencée le {start}, finie le {end} (heure locale).", "Started {start}, finished {end} (local time)."),
     "hl_night_step": _s("Étape", "Step"),
     "hl_night_code": _s("Code de sortie", "Exit code"),
+    "hl_nights_title": _s("Les dernières nuits", "The last nights"),
+    "hl_nights_none": _s("Aucun journal de nuit sur ce PC.", "No night log on this PC."),
     "hl_night_hint": _s("0 = réussie. Les passes de prédictions sortent avec 1 dès qu'une prédiction échoue : seul le cycle des fonds compte pour elles.",
                         "0 = success. Prediction passes exit with 1 as soon as one prediction fails: only the fund cycle counts for them."),
     "hl_subtitle": _s("Ce qui doit tourner tout seul tourne-t-il ? Tâches planifiées, sauvegarde, signaux du jour, analyses à jour, disque.",

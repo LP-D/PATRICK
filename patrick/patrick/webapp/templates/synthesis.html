@@ -66,8 +66,12 @@
 <p class="banner banner-error" role="alert"><b>{{ t('suspect_banner_title') }}</b> {{ t('home_suspect', n=home.n_suspect) }} <a href="/data-quality">{{ t('suspect_banner_link') }}</a></p>
 {% endif %}
 
+{# VI26 (26/11) : synthèse personnalisable : ordre et cartes masquées gardés dans ce navigateur (static/home_layout.js) #}
+<div class="home-layout-bar"><button type="button" class="btn-ghost" id="home-customize" aria-pressed="false">{{ t('hl_customize') }}</button>
+  <button type="button" class="btn-ghost hidden" id="home-reset">{{ t('hl_reset') }}</button></div>
+<div id="home-layout" data-label-up="{{ t('hl_up') }}" data-label-down="{{ t('hl_down') }}" data-label-hide="{{ t('hl_hide') }}" data-label-show="{{ t('hl_show') }}">
 {# ---- Trois questions ---- #}
-<div class="home-trio">
+<div class="home-trio" data-home-block="trio" data-home-label="{{ t('hl_block_trio') }}">
 <section class="card home-card">
     <h2>{{ t('home_q_data') }}</h2>
     <p>{{ t('home_q_data_body', f=home.n_recent_failures, d=home.recent_days, s=home.n_short, y=home.min_years) }}</p>
@@ -95,7 +99,7 @@
 </div>
 
 {# ---- Classes d'actifs ---- #}
-<section class="card">
+<section class="card" data-home-block="classes" data-home-label="{{ t('home_classes') }}">
 <h2>{{ t('home_classes') }}</h2>
 {% set crows = [] %}
 {% for c in home.classes %}
@@ -106,20 +110,24 @@
 </section>
 
 {# ---- D10 : où est le signal (AUC regroupée cible x horizon) ---- #}
-<section class="card" id="carte-signal">
+<section class="card" id="carte-signal" data-home-block="signal" data-home-label="{{ t('ph_title') }}">
 <h2>{{ t('ph_title') }}</h2>
 {{ lazy_block('/fragments/pooled-heatmap', 6, t('sb_loading'), t('lazy_retry')) }}
 </section>
 
 {# ---- Détail : chargé après l'affichage (6 s sur la vraie base) ---- #}
+<div data-home-block="detail" data-home-label="{{ t('hl_block_detail') }}">
 {{ lazy_block('/fragments/home?fdr_alpha=' ~ fdr_alpha, 8, t('sb_loading'), t('lazy_retry')) }}
+</div>
 
-<section class="card">
+<section class="card" data-home-block="regime" data-home-label="{{ t('home_regime') }}">
 <h2>{{ t('home_regime') }} <button type="button" class="info-icon" data-term="regime" data-term-label="{{ t('home_regime_term') }}" aria-label="{{ t('glossary_open_aria', term=t('home_regime_term')) }}">i</button></h2>
 <div id="market-state" class="market-state">
 <p class="hint">{{ t('home_regime_loading') }}</p>
 </div>
 <p class="hint">{{ t('home_regime_note') }}</p>
 </section>
+</div>
 <script src="{{ asset('market_state.js') }}"></script>
+<script src="{{ asset('home_layout.js') }}" defer></script>
 {% endblock %}

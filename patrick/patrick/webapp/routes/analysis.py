@@ -288,6 +288,16 @@ def register(app: FastAPI, templates, context) -> None:
             **context(request), "checks": items, "overall": health.overall(items), "reports": weekly_report.list_reports(),
             "report_name": name, "report_text": text, "night": night_status.night_status()})
 
+    @app.get("/fragments/night-history")
+    def night_history_fragment(request: Request):
+        """VI10 (26/11) : frise des dernières nuits (durée de chaque étape), chargée après l'affichage de /sante."""
+        from patrick.system import night_history
+        nights = night_history.history()
+        names = sorted({s["name"] for n in nights for s in n["steps"]})
+        scale = max([n["total_h"] for n in nights] + [1.0])
+        return templates.TemplateResponse(request, "_night_history.html", {**context(request), "nights": nights,
+                                                                            "names": names, "scale": scale})
+
     @app.get("/sante", response_class=HTMLResponse)
     def health_page(request: Request):
         return _health_page(request)

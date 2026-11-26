@@ -110,7 +110,8 @@ def test_templates_keep_only_data_driven_inline_styles():
     # _pooled_heatmap.html : --heat (intensité d'une case) est l'AUC regroupée de la paire (D10)
     assert {k: v for k, v in inline.items() if v} == {"_fund_overview.html": 1, "analysis.html": 1, "knowledge_hub.html": 2,
                                                       "_champion_history.html": 1, "_pooled_heatmap.html": 1,
-                                                      "_fund_panel.html": 1, "run_detail.html": 1}   # cascade d un fonds, frise des étapes (25/11) : largeur de barre --w
+                                                      "_fund_panel.html": 2, "run_detail.html": 1, "_fund_correlation.html": 1,
+                                                      "_run_funnel.html": 1, "asset_class.html": 1}   # 26/11 : entonnoir, carte des marchés   # cascade d un fonds, frise des étapes (25/11) : largeur de barre --w
 
 
 def test_shell_offers_pins_machine_chip_and_shortcut_help(client):

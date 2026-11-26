@@ -227,7 +227,7 @@
 <h3>{{ t('rd_by_algo') }}</h3>
 {% set algo_rows = [] %}
 {% for r in kpi.by_algo %}
-{% set _ = algo_rows.append([r.rank, r.algo, r.n] + panel_cells(r)) %}
+{% set _ = algo_rows.append([r.rank, r.algo | algo_tag, r.n] + panel_cells(r)) %}
 {% endfor %}
 {{ data_table([t('rd_c_rank'), t('rd_c_algo'), t('rd_c_cand')] + panel_heads(m_labels), algo_rows, num_cols=[0, 2, 3, 4, 5, 6]) }}
 
@@ -241,7 +241,7 @@
 <h3>{{ t('rd_rank_h') }}</h3>
 {% set rank_rows = [] %}
 {% for r in kpi.ranking[:15] %}
-{% set _ = rank_rows.append([r.rank, r.algo, r.n_features, r.sampler, r.n_horizons] + panel_cells(r)) %}
+{% set _ = rank_rows.append([r.rank, r.algo | algo_tag, r.n_features, r.sampler, r.n_horizons] + panel_cells(r)) %}
 {% endfor %}
 {{ data_table([t('rd_c_rank'), t('rd_c_algo'), t('rd_c_vars'), "Sampler", t('rd_kpi_horizons2')] + panel_heads(m_labels), rank_rows,
               num_cols=[0, 2, 4, 5, 6, 7, 8], collapse_after=5, more_label=t('rows_more'), less_label=t('rows_less'),
@@ -299,6 +299,14 @@
               screening_rows, num_cols=[1, 4, 5], collapse_after=5, more_label=t('rows_more'), less_label=t('rows_less')) }}
 {% endif %}
 </section>
+
+{# VI8 (26/11) : entonnoir de sélection des variables du modèle retenu #}
+{% if detail.best_trial %}
+<section id="entonnoir" class="card">
+<h2>{{ t('rd_funnel_h') }}</h2>
+{{ lazy_block('/fragments/run-funnel/' ~ (run.run_id | urlencode), 3, t('sb_loading'), t('lazy_retry')) }}
+</section>
+{% endif %}
 
 {# Panneau frère, pas imbriqué : un panneau DANS un panneau ne dit rien de plus
    que le filet qu'il remplace, et brouille la hiérarchie du plan de travail. #}

@@ -77,7 +77,7 @@
             <tbody>
             {% for a in c.assets %}
             <tr>
-                <td><a href="/targets/{{ a.symbol | urlencode }}" title="{{ a.symbol }}">{{ a.symbol | iname }}</a></td>
+                <td>{{ a.symbol | iclass }}<a href="/targets/{{ a.symbol | urlencode }}" title="{{ a.symbol }}">{{ a.symbol | iname }}</a></td>
                 <td>{{ pred_cell(a.cell, a.symbol | iname, dm_significance_alpha, live_hit_rate_warning_threshold, t, a.symbol, '/fragments/pred-pop?kind=directional&symbol=' ~ (a.symbol | urlencode) ~ '&h=' ~ a.cell.horizon ~ '&dm_alpha=' ~ dm_significance_alpha) }}</td>
                 {% if a.edge %}
                 <td class="n">{{ (a.edge.hit_rate * 100) | round | int }} % <span class="hint">({{ a.edge.n }})</span></td>

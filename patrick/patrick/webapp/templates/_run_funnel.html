@@ -1,0 +1,12 @@
+{# VI8 (26/11, analysis/feature_funnel.py) : de l'univers de séries aux variables du modèle retenu (largeurs en échelle logarithmique). #}
+{% if not funnel %}
+<p class="hint">{{ t('rd_funnel_none') }}</p>
+{% else %}
+<ol class="funnel">
+  {% for s in funnel.steps %}
+  <li class="funnel-step"><span class="funnel-bar" style="--w: {{ s.width }}%"><span class="pk-mono">{{ s.n }}</span></span>
+    <span class="funnel-label">{{ t('rd_funnel_' ~ s.key) }}</span></li>
+  {% endfor %}
+</ol>
+{% if funnel.families %}<p class="hint">{{ t('rd_funnel_families') }} : {% for f in funnel.families %}{{ f.family }} {{ f.n }}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+{% endif %}

@@ -2379,3 +2379,81 @@ html[data-sidebar="collapsed"] .sidebar-pins { display: none; }
 .ret-cal-grid { display: grid; grid-template-rows: repeat(5, 10px); grid-auto-columns: 10px; grid-auto-flow: column; gap: 2px; width: max-content; }
 .ret-cell { width: 10px; height: 10px; border-radius: 2px; }
 .ret-cell.is-up { background: var(--pos); } .ret-cell.is-down { background: var(--neg); }
+
+/* VI2 (26/11) : treemap des positions d'un fonds */
+.fund-treemap { position: relative; width: 100%; height: 220px; margin: 6px 0 4px; border-radius: 6px; overflow: hidden; }
+.tm-tile { position: absolute; box-sizing: border-box; border: 2px solid var(--bg); padding: 4px 6px; overflow: hidden;
+           font: 600 11px var(--mono, monospace); color: var(--text); white-space: nowrap; text-overflow: ellipsis; }
+.tm-tile span, .tm-tile small { display: block; overflow: hidden; text-overflow: ellipsis; }
+.tm-tile small { font-weight: 400; color: var(--text-2); }
+.tm-up { background: color-mix(in srgb, var(--pos) calc(var(--a) * 62%), transparent); }
+.tm-down { background: color-mix(in srgb, var(--neg) calc(var(--a) * 62%), transparent); }
+/* VI4 (26/11) : carte de corrélation */
+.corr-grid { border-collapse: collapse; font: 11px var(--mono, monospace); }
+.corr-grid th { padding: 3px 6px; color: var(--text-2); font-weight: 500; white-space: nowrap; }
+.corr-cell { padding: 4px 6px; text-align: center; min-width: 42px; }
+.corr-pos { background: color-mix(in srgb, var(--neg) calc(var(--a) * 70%), transparent); }
+.corr-neg { background: color-mix(in srgb, var(--pos) calc(var(--a) * 70%), transparent); }
+/* VI6 (26/11) : nuage risque / rendement */
+.fund-scatter { width: 100%; max-width: 720px; height: auto; display: block; }
+.sc-axis { stroke: var(--line-strong); stroke-width: 1; }
+.sc-label { fill: var(--text-3); font: 11px var(--mono, monospace); }
+.sc-tick { fill: var(--text-3); font: 10px var(--mono, monospace); }
+.sc-name { fill: var(--text-2); font: 11px var(--sans, sans-serif); }
+.sc-dot circle { fill-opacity: 0.75; stroke: var(--bg); stroke-width: 1.5; }
+.sc-up circle { fill: var(--pos); } .sc-down circle { fill: var(--neg); }
+
+/* VI10 (26/11) : frise des dernières nuits */
+.night-gantt { width: 100%; height: auto; display: block; margin: 6px 0; }
+.ng-day { fill: var(--text-3); font: 10px var(--mono, monospace); }
+.ng-step { stroke: none; } .ng-step.ng-failed { stroke: var(--neg); stroke-width: 2; }
+.ng-c0 { fill: var(--brand); background: var(--brand); } .ng-c1 { fill: var(--pos); background: var(--pos); }
+.ng-c2 { fill: var(--text-2); background: var(--text-2); } .ng-c3 { fill: var(--info, #0a84ff); background: var(--info, #0a84ff); }
+.ng-c4 { fill: var(--warn, #ffd60a); background: var(--warn, #ffd60a); } .ng-c5 { fill: var(--line-strong); background: var(--line-strong); }
+.ng-c6 { fill: var(--brand-soft); background: var(--brand-soft); } .ng-c7 { fill: var(--neg); background: var(--neg); }
+.ng-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; list-style: none; padding: 0; margin: 4px 0 0; font-size: 11px; color: var(--text-2); }
+.ng-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+/* VI8 (26/11) : entonnoir de sélection des variables */
+.funnel { list-style: none; padding: 0; margin: 6px 0; display: grid; gap: 4px; }
+.funnel-step { display: grid; grid-template-columns: 1fr minmax(160px, 34%); gap: 10px; align-items: center; font-size: 12px; }
+.funnel-bar { display: block; width: var(--w); margin: 0 auto; background: var(--brand-soft); border: 1px solid var(--brand); border-radius: 4px;
+              text-align: center; padding: 2px 0; color: var(--text); }
+.funnel-label { color: var(--text-2); }
+
+/* VI14 (26/11) : carte des marchés par région */
+.wm-regions { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.wm-region h3 { font-size: 12px; color: var(--text-2); margin: 0 0 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+.wm-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+.wm-tile { display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 6px; text-decoration: none; color: var(--text);
+           border: 1px solid var(--line); }
+.wm-tile.is-up { background: color-mix(in srgb, var(--pos) calc(15% + var(--a) * 45%), transparent); }
+.wm-tile.is-down { background: color-mix(in srgb, var(--neg) calc(15% + var(--a) * 45%), transparent); }
+.wm-name { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wm-pct { font-size: 13px; font-weight: 600; }
+
+/* VI21 (26/11) : une couleur fixe par famille de modèle, sur toutes les pages */
+.algo-tag { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.algo-tag::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--algo, var(--text-3)); flex: none; }
+.algo-tag[data-algo="xgboost"] { --algo: #ff9f0a; } .algo-tag[data-algo="lightgbm"] { --algo: #30d158; }
+.algo-tag[data-algo="catboost"] { --algo: #ffd60a; } .algo-tag[data-algo="forest"] { --algo: #64d2ff; }
+.algo-tag[data-algo="linear"] { --algo: #8e8e93; } .algo-tag[data-algo="mlp"] { --algo: #0a84ff; }
+.algo-tag[data-algo="rnn"] { --algo: #bf5af2; } .algo-tag[data-algo="cnn"] { --algo: #ff375f; }
+.algo-tag[data-algo="transformer"] { --algo: #5e5ce6; } .algo-tag[data-algo="stack"] { --algo: #ac8e68; }
+.algo-tag[data-algo="rl"] { --algo: #66d4cf; }
+/* VI22 (26/11) : badge de classe d'actifs devant un nom */
+.ac-badge { display: inline-block; min-width: 26px; padding: 0 4px; margin-right: 4px; border-radius: 3px; font: 600 9px/15px var(--mono, monospace);
+            text-align: center; letter-spacing: 0.03em; color: var(--text-2); border: 1px solid var(--line-strong); vertical-align: 1px; }
+.ac-badge[data-ac="fx"] { color: var(--info); border-color: var(--info); }
+.ac-badge[data-ac="crypto"] { color: var(--warn); border-color: var(--warn); }
+.ac-badge[data-ac="futures"] { color: var(--brand); border-color: var(--brand); }
+.ac-badge[data-ac="volatility_index"] { color: var(--neg); border-color: var(--neg); }
+.ac-badge[data-ac="index"] { color: var(--pos); border-color: var(--pos); }
+
+/* VI26 (26/11) : synthèse personnalisable */
+.home-layout-bar { display: flex; justify-content: flex-end; gap: 6px; margin: 4px 0 6px; }
+#home-layout:not(.home-editing) > .home-hidden { display: none; }
+.home-editing > .home-hidden { opacity: 0.45; }
+.home-editing > [data-home-block] { outline: 1px dashed var(--line-strong); outline-offset: 3px; }
+.home-block-tools { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px; grid-column: 1 / -1; }
+.home-block-name { font-weight: 600; margin-right: auto; color: var(--text-2); }

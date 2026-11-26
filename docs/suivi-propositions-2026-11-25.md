@@ -119,32 +119,32 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 
 | # | Proposition | Statut |
 |---|---|---|
-| VI1 | Cône de prévision | à faire : cône de prévision sur la courbe d'un actif (la prévision HAR existe, le dessin dans le graphique de cours reste à écrire) |
-| VI2 | Treemap d'un fonds | à faire |
+| VI1 | Cône de prévision | fait (lot 11 : cône à 68 % et 95 % sur 20 séances au bout de la courbe d'un actif, sigma HAR sinon écart-type des 60 dernières séances ; `/api/asset-stats`, `asset_stats.js`) |
+| VI2 | Treemap d'un fonds | fait (lot 11 : positions ouvertes du panneau d'un fonds, surface = exposition notionnelle, couleur = sens du P&L, intensité = son ampleur ; `webapp/fund_visuals.py`) |
 | VI3 | Cascade du rendement | fait (lot 10 : cascade gain avant frais → frais → financement → gain net dans le panneau d'un fonds) |
-| VI4 | Carte de corrélation des positions | à faire |
+| VI4 | Carte de corrélation des positions | fait (lot 11 : bloc repliable du panneau d'un fonds, rendements d'un an lus dans les cours du fonds, ordre par regroupement hiérarchique) |
 | VI5 | Calendrier en carte de chaleur | fait (lot 10 : calendrier des rendements quotidiens des 12 derniers mois sous la perte depuis le plus haut d'un fonds) |
-| VI6 | Nuage risque / rendement des fonds | à faire |
+| VI6 | Nuage risque / rendement des fonds | fait (lot 11 : une bulle par stratégie dans chaque catégorie de /fonds, volatilité en x, rendement depuis l'ouverture en y, taille = valeur) |
 | VI7 | Courbe ROC avec curseur de seuil | déjà fait en partie : courbe ROC dans l'analyse d'un run (`analysis/sec_predict.py`) ; le curseur de seuil reste à faire |
-| VI8 | Entonnoir de sélection des variables | à faire |
+| VI8 | Entonnoir de sélection des variables | fait (lot 11 : section « Entonnoir » de la page d'un run : séries, séries gardées, variables construites, variables retenues, et familles ; lu dans les métadonnées du modèle exporté) |
 | VI9 | Importance des familles de variables au fil des plis | déjà fait en partie : stabilité des variables d'un pli à l'autre (Jaccard) sur la page d'un run ; vue par famille à faire |
-| VI10 | Frise de la nuit | à faire |
+| VI10 | Frise de la nuit | fait (lot 11 : « Les dernières nuits » sur /sante, une ligne par nuit et une barre par étape ; lecture incrémentale du journal : ~30 s la première fois sur un journal de 2,8 Go, instantané ensuite) |
 | VI11 | Jauge du disque et des caches | déjà fait : disque et tailles des dossiers de données sur /diagnostics (`analysis/diagnostics.py`) |
 | VI12 | Étapes d'un run en frise | fait (lot 10 : frise des étapes en tête de la section « Durées » de la page d'un run) |
 | VI13 | Mur de signaux | déjà fait : grand tableau cibles × horizons de /predictions, couleur par direction et fiabilité |
-| VI14 | Carte du monde des marchés | à faire |
+| VI14 | Carte du monde des marchés | fait (lot 11 : carte par région en tête de la page Indices, variation de la dernière séance de chaque place, rafraîchie avec le bandeau) |
 | VI15 | Mini-courbes dans les tableaux | déjà fait en partie (mini-courbes de /donnees et des résultats) ; /predictions et /runs à faire |
 | VI16 | Pastille de fraîcheur sur chaque chiffre | déjà fait en partie : page /data-freshness ; pastille sur chaque chiffre à faire |
 | VI17 | Distribution des rendements d'un actif | déjà fait : distributions des rendements dans /exploration |
 | VI18 | Week-ends et fériés grisés | fait (lot 10 : trous de plus de 4 jours grisés sur tous les graphiques du moteur commun, week-ends ordinaires exclus) |
 | VI19 | Échelle logarithmique | fait (lot 10 : bouton « Échelle logarithmique » sur tous les graphiques en ligne du moteur commun) |
 | VI20 | Zoom par sélection et mini-carte | déjà fait : zoom par sélection, déplacement et molette dans le moteur commun (D23) ; mini-carte à faire |
-| VI21 | Couleur fixe par famille de modèle | à faire |
-| VI22 | Icône de classe d'actifs | à faire |
+| VI21 | Couleur fixe par famille de modèle | fait (lot 11 : pastille de couleur par famille, la même sur la page d'un run, l'historique des champions, /reel ; `webapp/visual_tags.py`) |
+| VI22 | Icône de classe d'actifs | fait (lot 11 : badge FX, CRY, FUT, VOL, MAC, IND, ACT devant les noms de /predictions et /runs) |
 | VI23 | Comparateur de runs en « diff » | fait (lot 10 : lignes différentes surlignées et case « Seulement les différences » dans le comparateur de runs) |
-| VI24 | Notes libres datées sur les courbes | à faire |
+| VI24 | Notes libres datées sur les courbes | fait (lot 11 : « Notes sur la courbe » sous le graphique d'un actif, trait vertical ✎ à la date ; table `chart_note`, migration 0061 ; propres à chaque PC, non partagées) |
 | VI25 | Plein écran d'un graphique | fait (lot 10 : bouton « Plein écran » sur les graphiques du moteur commun) |
-| VI26 | Synthèse personnalisable | à faire |
+| VI26 | Synthèse personnalisable | fait (lot 11 : bouton « Personnaliser » de la Synthèse : monter, descendre, masquer chaque bloc ; gardé par ce navigateur) |
 | VI27 | Mode dense des tableaux | fait (lot 10 : « Tableaux denses » dans /reglages, gardé par ce navigateur) |
 | VI28 | Thème haute lisibilité | fait (lot 10 : « Haute lisibilité » dans /reglages : corps 112 %, texte secondaire au contraste plein, focus épais) |
 | VI29 | Onglet du navigateur vivant | fait (lot 10 : titre de l'onglet « 45 % · cible » pendant un run, ⏸ en pause) |

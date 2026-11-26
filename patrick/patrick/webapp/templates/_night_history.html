@@ -1,0 +1,20 @@
+{# VI10 (26/11) : frise des dernières nuits. Une ligne par nuit (la plus récente en bas), une barre par étape à sa place dans la nuit ;
+   couleur = étape (la même d'une nuit à l'autre), bord rouge = étape en échec. On voit d'un coup d'œil quelle étape s'allonge. #}
+{% if not nights %}
+<p class="hint">{{ t('hl_nights_none') }}</p>
+{% else %}
+{% set row_h = 16 %}{% set label_w = 74 %}{% set width = 760 %}
+<svg class="night-gantt" viewBox="0 0 {{ width }} {{ nights | length * row_h + 24 }}" role="img" aria-label="{{ t('hl_nights_title') }}">
+  {% for n in nights %}{% set y = loop.index0 * row_h %}
+  <text class="ng-day" x="0" y="{{ y + 11 }}">{{ n.started[5:10] }}</text>
+  {% for s in n.steps %}{% if s.hours > 0 %}
+  {% set x = label_w + (s.offset_h / scale) * (width - label_w - 10) %}{% set w = [(s.hours / scale) * (width - label_w - 10), 1.5] | max %}
+  <rect class="ng-step ng-c{{ names.index(s.name) % 8 }}{{ ' ng-failed' if s.failed and 'predictions' not in s.name else '' }}" x="{{ x | round(1) }}" y="{{ y + 2 }}" width="{{ w | round(1) }}" height="{{ row_h - 4 }}">
+    <title>{{ n.started[:10] }} · {{ s.name }} : {{ '%.1f' | format(s.hours) }} h{% if s.code is not none %} (code {{ s.code }}){% endif %}</title></rect>
+  {% endif %}{% endfor %}
+  {% endfor %}
+  <text class="ng-day" x="{{ label_w }}" y="{{ nights | length * row_h + 16 }}">0 h</text>
+  <text class="ng-day" x="{{ width - 10 }}" y="{{ nights | length * row_h + 16 }}" text-anchor="end">{{ '%.0f' | format(scale) }} h</text>
+</svg>
+<ul class="ng-legend">{% for name in names %}<li><span class="ng-swatch ng-c{{ loop.index0 % 8 }}"></span>{{ name }}</li>{% endfor %}</ul>
+{% endif %}
