@@ -59,13 +59,15 @@ def paths() -> dict:
             "install": str(runtime.repo_root()), "shared": sync.configured_folder()}
 
 
-def spawn_relaunch(*, do_sync: bool = False, do_update: bool = False) -> None:
+def spawn_relaunch(*, do_sync: bool = False, do_update: bool = False, stop_worker: bool = False) -> None:
     """Lance l'assistant détaché qui arrête ce serveur, met à jour / synchronise, puis le relance."""
     args = [runtime.console_python(), "-m", "patrick.desktop", "relaunch", "--server-pid", str(os.getpid())]
     if do_sync:
         args.append("--sync")
     if do_update:
         args.append("--update")
+    if stop_worker:
+        args.append("--stop-worker")
     runtime.spawn_detached(args, cwd=runtime.project_dir(), log=runtime.log_dir() / "relaunch.log")
 
 
@@ -213,9 +215,20 @@ def register(app: FastAPI, templates, context) -> None:
 
     @app.post("/api/app/update/apply")
     async def update_apply(request: Request):
-        if await run_in_threadpool(lambda: runtime.worker_running()):
+        """Sans entraînement : mise à jour tout de suite. Pendant un entraînement (demande du 25/11) : 409 sans `mode` ;
+        `{"mode": "after_run"}` = à la fin du run en cours ; `{"mode": "now"}` = le worker est arrêté, le run reprend après la relance."""
+        try:
+            body = await request.json()
+        except ValueError:
+            body = None
+        mode = body.get("mode") if isinstance(body, dict) else None
+        busy = await run_in_threadpool(lambda: runtime.worker_running())
+        if busy and mode not in ("now", "after_run"):
             return JSONResponse({"error": "busy"}, status_code=409)
-        spawn_relaunch(do_update=True)
+        if busy and mode == "after_run":
+            await run_in_threadpool(update.request_after_run)
+            return {"ok": True, "scheduled": True}
+        spawn_relaunch(do_update=True, stop_worker=busy and mode == "now")
         return {"ok": True}
 
     @app.get("/api/app/relaunch")

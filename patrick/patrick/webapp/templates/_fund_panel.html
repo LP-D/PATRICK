@@ -31,6 +31,20 @@
   {% if k.n_sessions < 60 %} {{ t('fund_edge_line_short') }}{% endif %}
 </div>
 {% endif %}
+{# VI3 (25/11) : cascade du rendement : gain avant frais, frais, financement, gain net (barres à l'échelle du plus grand pas) #}
+{% if k.gross_pnl is not none and k.pnl is not none %}
+{# le gain avant frais comprend déjà les dividendes (kpis : gain avant frais = gain net + frais + financement) #}
+{% set steps = [('fund_wf_gross', k.gross_pnl, 'total'), ('fund_wf_fees', -(k.fees or 0), 'step'), ('fund_wf_financing', -(k.financing or 0), 'step'),
+                ('fund_wf_net', k.pnl, 'total')] %}
+{% set scale = (steps | map(attribute=1) | map('abs') | max) or 1 %}
+<div class="fund-waterfall" role="img" aria-label="{{ t('fund_wf_title') }}">
+  {% for key, v, kind in steps %}{% if kind == 'total' or v %}
+  <div class="wf-row wf-{{ kind }}"><span class="wf-label">{{ t(key) }}</span>
+    <span class="wf-track"><span class="wf-bar {{ 'wf-pos' if v >= 0 else 'wf-neg' }}" style="--w: {{ (100 * (v | abs) / scale) | round(1) }}%"></span></span>
+    <span class="wf-val pk-mono">{{ v | eur }}</span></div>
+  {% endif %}{% endfor %}
+</div>
+{% endif %}
 
 <div class="metric-grid">
   {{ metric(t('fund_kpi_nav'), k.nav | eur, t('fund_hint_nav'), "neutral") }}
@@ -68,6 +82,8 @@
 </label>
 <div id="fund-chart" class="chart-wrap" aria-label="{{ t('fund_chart_title') }}"></div>
 <div id="fund-chart-dd" class="chart-wrap" aria-label="{{ t('fund_chart_drawdown') }}"></div>
+{# VI5 (25/11) : rendements quotidiens des 12 derniers mois en calendrier (une case par séance, couleur et intensité selon le gain) #}
+<div id="fund-calendar" class="ret-calendar" role="img" aria-label="{{ t('fund_cal_title') }}" data-label-legend="{{ t('fund_cal_legend') }}"></div>
 <script id="fund-chart-data" type="application/json">{{ {"series": snap.series, "capital": k.capital, "labels": {"nav": t('fund_chart_nav'), "gross": t('fund_chart_gross'), "capital": t('fund_chart_capital'), "drawdown": t('fund_chart_drawdown'), "rebased": t('fund_chart_rebased')}} | tojson }}</script>
 
 <h3>{{ t('fund_pos_title') }} <span class="hint">({{ open_positions | length }})</span></h3>

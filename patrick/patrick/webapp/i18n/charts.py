@@ -10,6 +10,8 @@ def _s(fr: str, en: str) -> dict[str, str]:
 CHART_STRINGS: dict[str, dict[str, str]] = {
     "chart_zoom_in": _s("Zoom avant", "Zoom in"),
     "chart_zoom_out": _s("Zoom arrière", "Zoom out"),
+    "chart_log": _s("Échelle logarithmique", "Log scale"),
+    "chart_full": _s("Plein écran", "Full screen"),
     "chart_reset": _s("Vue initiale", "Reset zoom"),
     "chart_export_png": _s("Image (PNG)", "Image (PNG)"),
     "chart_export_csv": _s("Données (CSV)", "Data (CSV)"),

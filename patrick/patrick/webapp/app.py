@@ -1193,6 +1193,24 @@ async def reorder_queued_jobs(request: Request):
     return {"queue": run_manager.reorder_queued_runs(order)}
 
 
+@app.post("/api/queue/hold")
+async def hold_queue(request: Request):
+    """FO26 (25/11) : `{"until": "AAAA-MM-JJTHH:MM"}` retient la file jusqu'à cette heure locale ; `{"until": null}` la relâche."""
+    from patrick.system import queue_hold
+    body = await request.json()
+    raw = body.get("until") if isinstance(body, dict) else None
+    if raw:
+        try:
+            until = datetime.fromisoformat(str(raw))
+        except ValueError:
+            return JSONResponse({"error": "heure attendue au format AAAA-MM-JJTHH:MM"}, status_code=400)
+        queue_hold.set_hold(until)
+    else:
+        queue_hold.set_hold(None)
+    until = queue_hold.hold_until()
+    return {"until": until.isoformat(timespec="minutes") if until and queue_hold.held() else None}
+
+
 @app.post("/api/queue/sort-urgency")
 def sort_queue_by_urgency():
     """AM9 (25/11) : range la file par urgence (paires sans champion, puis champions les plus anciens) ; renvoie la file rangée."""

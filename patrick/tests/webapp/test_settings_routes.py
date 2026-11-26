@@ -243,7 +243,7 @@ def test_update_check_and_apply(client, calls, monkeypatch):
     monkeypatch.setattr(update, "check", lambda *a, **k: {"state": "available", "behind": 2, "news": ["a", "b"]})
     assert client.post("/api/app/update/check").json()["behind"] == 2
     assert client.post("/api/app/update/apply").json() == {"ok": True}
-    assert calls["relaunch"] == [{"do_update": True}]
+    assert calls["relaunch"] == [{"do_update": True, "stop_worker": False}]
 
 
 def test_relaunch_state_exposes_progress_and_the_boot_id(client):

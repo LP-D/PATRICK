@@ -56,6 +56,37 @@ def register(app: FastAPI, templates: Jinja2Templates, i18n_ctx: Callable[[Reque
         """Index de recherche de la palette (Ctrl K) : chargé une seule fois à la première ouverture, puis gardé par le navigateur."""
         return JSONResponse(asset_index(i18n.get_lang(request)), headers={"Cache-Control": "private, max-age=600"})
 
+    @app.get("/api/search-index")
+    def search_index_api(request: Request):
+        """AM13 (25/11) : le reste de l'index de la palette (Ctrl K) : notions du dictionnaire, cours et 300 derniers runs.
+        `[{"u": adresse, "l": libellé, "g": groupe, "k": "notion" | "cours" | "run", "a": mots de recherche en plus}]`."""
+        from patrick.knowledge import courses, dictionary
+        from patrick.tracking import db as trackdb
+        lang = i18n.get_lang(request)
+        out = []
+        for term in dictionary.all_terms():
+            label = term.label_en if lang == "en" else term.label_fr
+            out.append({"u": "/connaissances/dictionnaire#term-" + term.key, "l": label, "g": "notion", "k": "notion",
+                        "a": " ".join(term.alias)})
+        for course in getattr(courses, "COURSES", ()) or ():
+            slug = getattr(course, "slug", None) or (course.get("slug") if isinstance(course, dict) else None)
+            title = getattr(course, "title", None) or (course.get("title") if isinstance(course, dict) else None)
+            if slug and title:
+                out.append({"u": "/connaissances/cours/" + slug, "l": str(title), "g": "cours", "k": "cours", "a": ""})
+        conn = trackdb.connect()
+        try:
+            rows = conn.execute("SELECT run_id, target, horizon, config_json FROM run ORDER BY started_at DESC, rowid DESC LIMIT 300").fetchall()
+        finally:
+            conn.close()
+        import json as _json
+        for run_id, target, horizon, cfg in rows:
+            try:
+                name = (_json.loads(cfg or "{}") or {}).get("name") or ""
+            except (TypeError, ValueError):
+                name = ""
+            out.append({"u": f"/runs/{run_id}/analyse", "l": f"{name or run_id} · {target} h{horizon}", "g": "run", "k": "run", "a": run_id})
+        return JSONResponse(out, headers={"Cache-Control": "private, max-age=300"})
+
     @app.get("/split")
     def split_page(request: Request):
         """Écrans côte à côte : cadre seul (aucune lecture de la base), les volets chargent les autres pages dans des `<iframe>` (static/split.js)."""

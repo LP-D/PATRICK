@@ -101,6 +101,45 @@
         });
     }
 
+    /* VI5 (25/11) : calendrier des rendements quotidiens (12 derniers mois) : colonnes = semaines, lignes = jours ouvrés ; vert / rouge, plus
+       foncé quand le mouvement est grand (échelle : 2 écarts-types des rendements affichés). La valeur exacte est dans l'infobulle. */
+    function drawCalendar(pts) {
+        var host = document.getElementById("fund-calendar");
+        if (!host || pts.length < 3) return;
+        var rets = [];
+        for (var i = 1; i < pts.length; i++) {
+            var a = pts[i - 1].nav, b = pts[i].nav;
+            if (a > 0 && b != null) rets.push({ t: pts[i].t, r: b / a - 1 });
+        }
+        var last = rets.length ? new Date(rets[rets.length - 1].t + "T00:00:00") : null;
+        if (!last) return;
+        var start = new Date(last); start.setDate(start.getDate() - 364);
+        rets = rets.filter(function (x) { return new Date(x.t + "T00:00:00") >= start; });
+        var sd = Math.sqrt(rets.reduce(function (s, x) { return s + x.r * x.r; }, 0) / Math.max(1, rets.length)) || 0.01;
+        var pct = new Intl.NumberFormat(document.documentElement.lang || "fr", { style: "percent", maximumFractionDigits: 2, signDisplay: "always" });
+        host.textContent = "";
+        var grid = document.createElement("div");
+        grid.className = "ret-cal-grid";
+        rets.forEach(function (x) {
+            var d = new Date(x.t + "T00:00:00"), dow = d.getDay();
+            if (dow === 0 || dow === 6) return;                         // week-end : pas de séance pour la plupart des actifs
+            var week = Math.floor((d - start) / 604800000);
+            var cell = document.createElement("span");
+            var k = Math.min(1, Math.abs(x.r) / (2 * sd));
+            cell.className = "ret-cell " + (x.r >= 0 ? "is-up" : "is-down");
+            cell.style.gridColumn = String(week + 1);
+            cell.style.gridRow = String(dow);
+            cell.style.opacity = String(0.25 + 0.75 * k);
+            cell.title = x.t + " : " + pct.format(x.r);
+            grid.appendChild(cell);
+        });
+        host.appendChild(grid);
+        var legend = document.createElement("p");
+        legend.className = "hint";
+        legend.textContent = host.getAttribute("data-label-legend") || "";
+        host.appendChild(legend);
+    }
+
     function drawChart() {
         var host = document.getElementById("fund-chart"), dataEl = document.getElementById("fund-chart-data");
         if (!host || !dataEl) return;
@@ -116,6 +155,7 @@
             yFmt: function (v) { return eur.format(v); }, ranges: true, title: host.getAttribute("aria-label") || "", height: 260,
             sync: "fund-chart",
         });
+        drawCalendar(pts);
         // D12 (24/11) : perte depuis le plus haut de la valeur nette, sous la courbe, même réticule (`sync`).
         var ddHost = document.getElementById("fund-chart-dd");
         if (ddHost && pts.length > 1) {

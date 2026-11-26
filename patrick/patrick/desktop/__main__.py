@@ -25,9 +25,13 @@ def _parser() -> argparse.ArgumentParser:
     upd = sub.add_parser("update", help="met à jour PATRICK")
     upd.add_argument("--check", action="store_true", help="dit seulement s'il y a une nouvelle version")
     upd.add_argument("--pause", action="store_true", help="attend une touche à la fin (fenêtre de commande)")
+    upd.add_argument("--now", action="store_true", help="même si un entraînement tourne : il est arrêté puis repris où il en était")
+    upd.add_argument("--after-run", action="store_true", help="pendant un entraînement : mise à jour à la fin du run en cours")
     relaunch = sub.add_parser("relaunch", help="relance le serveur (interne)")
     relaunch.add_argument("--sync", action="store_true")
     relaunch.add_argument("--update", action="store_true")
+    relaunch.add_argument("--stop-worker", action="store_true")
+    relaunch.add_argument("--wait-pid", type=int, default=None)
     relaunch.add_argument("--server-pid", type=int, default=None)
     pick = sub.add_parser("pick-folder", help="sélecteur de dossier (interne)")
     pick.add_argument("--initial", default=None)
@@ -74,7 +78,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "update":
         from patrick.desktop import update
 
-        result = update.check() if args.check else update.apply(progress=print)
+        if args.after_run:
+            update.request_after_run()
+            print("Mise à jour demandée : elle se fera à la fin du run en cours (le worker s'arrête entre deux jobs, puis la file reprend).")
+            return 0
+        result = update.check() if args.check else update.apply(progress=print, stop_worker=args.now)
+        if result.get("interrupted"):                   # --now : le job interrompu est remis en file et un worker le reprend
+            from patrick.webapp import run_manager
+            run_manager.recover_interrupted_runs(force=True)
         print(json.dumps(result, ensure_ascii=False, indent=1) if args.check else result["message"])
         if args.pause:
             input("Appuie sur Entrée pour fermer…")
@@ -82,7 +93,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "relaunch":
         from patrick.desktop import launcher
 
-        return launcher.relaunch(do_sync=args.sync, do_update=args.update, server_pid=args.server_pid)
+        return launcher.relaunch(do_sync=args.sync, do_update=args.update, server_pid=args.server_pid, stop_worker=args.stop_worker,
+                                 wait_pid=args.wait_pid)
     if args.command == "pick-folder":
         from patrick.desktop import ui
 

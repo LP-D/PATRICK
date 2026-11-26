@@ -42,7 +42,21 @@
     var subscribers = [];
     var actionListeners = [];
     var received = false;
+    // VI29 (25/11) : l'onglet du navigateur montre l'avancement du run en cours (« 45 % · EURUSD=X »), lisible depuis un autre onglet ;
+    // le titre d'origine revient quand rien ne tourne.
+    var baseTitle = document.title;
+    function liveTitle(active) {
+        var p = active && active.progress;
+        if (active && active.status === "running" && p && p.total > 0) {
+            document.title = Math.floor(100 * p.done / p.total) + " % · " + (active.target || active.name || "run") + " — " + baseTitle;
+        } else if (active && active.status === "paused") {
+            document.title = "⏸ " + (active.target || active.name || "run") + " — " + baseTitle;
+        } else {
+            document.title = baseTitle;
+        }
+    }
     function publish() {
+        liveTitle(state.active);
         subscribers.forEach(function (fn) { fn(state); });
     }
 
@@ -312,6 +326,11 @@
         setQueueOpen(queueToggle.getAttribute("aria-expanded") !== "true");
     });
     clearQueueBtn.addEventListener("click", function () { queueRequest("/api/queue", { method: "DELETE" }); });
+    var holdInput = $("queue-hold-at");                 // FO26 : la file part à l'heure choisie (vide : tout de suite)
+    if (holdInput) holdInput.addEventListener("change", function () {
+        fetch("/api/queue/hold", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
+                                   body: JSON.stringify({ until: holdInput.value || null }) });
+    });
     var sortQueueBtn = $("sort-queue-btn");            // AM9 : paires sans champion puis champions les plus anciens d'abord
     if (sortQueueBtn) sortQueueBtn.addEventListener("click", function () { queueRequest("/api/queue/sort-urgency", { method: "POST" }); });
 

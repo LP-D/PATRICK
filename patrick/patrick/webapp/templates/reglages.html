@@ -65,6 +65,14 @@
     <button type="button" id="update-check" class="btn-secondary">{{ t('app_update_check') }}</button>
     <button type="button" id="update-apply" class="btn hidden">{{ t('app_update_apply') }}</button>
   </div>
+  {# Mise à jour pendant un entraînement (25/11) : à la fin du run en cours, ou maintenant (le run reprend où il en était) #}
+  <div id="update-busy" class="banner banner-warning hidden" role="group" aria-label="{{ t('app_update_busy_title') }}">
+    <p>{{ t('app_update_busy_text') }}</p>
+    <div class="set-row set-actions">
+      <button type="button" id="update-after-run" class="btn">{{ t('app_update_after_run') }}</button>
+      <button type="button" id="update-now" class="btn-secondary">{{ t('app_update_now') }}</button>
+    </div>
+  </div>
   <p id="update-result" class="hint" aria-live="polite"></p>
   <ul id="update-news" class="set-news"></ul>
   <p class="hint">{{ t('app_update_hint') }}</p>
@@ -81,6 +89,10 @@
     <button type="button" id="port-save" class="btn-secondary">{{ t('btn_save_setting') }}</button>
   </div>
   <p class="hint">{{ t('app_port_hint') }}</p>
+  {# VI27 / VI28 (25/11) : préférences d'affichage de CE navigateur (localStorage), appliquées avant l'affichage de chaque page #}
+  <label class="set-check"><input type="checkbox" id="pref-density" data-local-pref="patrick-density" data-on="dense" data-attr="data-density"> {{ t('pref_density') }}</label>
+  <label class="set-check"><input type="checkbox" id="pref-contrast" data-local-pref="patrick-contrast" data-on="high" data-attr="data-contrast"> {{ t('pref_contrast') }}</label>
+  <p class="hint">{{ t('pref_display_hint') }}</p>
   {% if windows %}
   <div class="set-row set-actions">
     <button type="button" id="shortcuts-make" class="btn-secondary">{{ t('app_shortcuts') }}</button>

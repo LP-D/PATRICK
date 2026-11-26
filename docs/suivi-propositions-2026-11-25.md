@@ -26,7 +26,7 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 | AM10 | Bande de non-transaction sur les fonds | déjà fait : le pilote ne change une taille que si le budget a bougé de plus de 10 % (`autopilot.SIZING_TOLERANCE`) |
 | AM11 | Spreads calibrés sur les vrais bid/ask | fait en partie (lot 7 : `patrick fund spreads` mesure l'écart achat-vente affiché par Yahoo par classe et le compare aux médianes du modèle) ; remplacer les médianes = décision (change les frais et le P&L passé des fonds) |
 | AM12 | Intervalles de confiance sur AUC et F1 | déjà fait : AUC avec intervalle de bootstrap par blocs dans l'analyse d'un run (sections « prédiction » et « robustesse », `analysis/sec_predict.py`, `sec_robust.py`) |
-| AM13 | Recherche Ctrl K élargie | à faire (lot 9) |
+| AM13 | Recherche Ctrl K élargie | fait (lot 9 : la palette Ctrl K cherche aussi les 749 notions du dictionnaire, les cours et les 300 derniers runs, index chargé à la première saisie) |
 | AM14 | Cliquet pyright sur les modules d'argent | fait (lots 2-3 : `fund/selection.py`, `core/perf.py`, `tracking/run_queries.py` ajoutés au cliquet pyright ; le reste des modules d'argent compte 316 erreurs, surtout des annotations de pandas) |
 | AM15 | Liste blanche testée des requêtes SQL assemblées | fait (lots 2-3 : les constructeurs relus filtrent déjà leurs noms ; liste fermée ajoutée aux ordres limite ; `tests/repo/test_sql_builders.py` refuse tout nouveau constructeur non relu) |
 | AM16 | Tests de propriété sur la fiscalité et les frais | fait (lots 2-3 : `tests/placements/test_tax_fee_properties.py`, hypothesis : impôt jamais négatif, jamais au-delà du gain hors PER, couple et durée jamais pénalisants, frais positifs et croissants, forfait exclusif) |
@@ -37,8 +37,8 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 | AM21 | Dependabot sur les versions figées | déjà fait : `.github/dependabot.yml` (pip et actions, chaque semaine) ; le fichier figé se régénère par `constraints-regen.yml` (B2) |
 | AM22 | Fusionner `feat/sync-en-clair` (ADR 0020) | déjà fait : ADR 0020 fusionnée le 13/11 (PR 72) ; la branche distante restante est un reste |
 | AM23 | Rotation des journaux | fait (lots 4-5 : la nuit compresse `nightly.log` au-delà de 300 Mo et garde 4 archives ; testé sur un faux journal) |
-| AM24 | Couverture anglaise mesurée | à faire (lot 9) |
-| AM25 | Erreurs de formulaire sur le champ concerné | à faire (lot 9) |
+| AM24 | Couverture anglaise mesurée | fait (lot 9 : mesurée à 100 % (6 042 libellés, aucun sans anglais ni recopié) ; `tests/webapp/test_i18n_coverage.py` garde cette couverture) |
+| AM25 | Erreurs de formulaire sur le champ concerné | fait (lot 9 : formulaire de lancement : une erreur « « Libellé » : … » s'affiche sous le champ, qui reçoit `aria-invalid` et le focus) |
 | AM26 | Phases de nuit indépendantes en parallèle | rien à changer : mesuré sur le journal réel, la nuit est dominée par les prédictions (étapes de 59 000 à 63 000 s) ; les autres étapes durent quelques minutes, les paralléliser ne gagnerait rien et chargerait les processeurs pendant les prédictions |
 | AM27 | Route `/healthz` | fait (lots 4-5 : `/healthz` : version du schéma de la base et du code, `server_too_old`, `migrations_pending`, worker vivant) |
 | AM28 | graphify à jour automatiquement | fait (lots 2-3 : crochet `.githooks/post-merge`, `graphify update .` en arrière-plan après un `git pull`) |
@@ -109,43 +109,50 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 | FO23 | Dividendes et détachements | déjà fait en partie : les dividendes versés entrent dans le P&L des positions des fonds (colonne `dividend` des cours) ; l'agenda des détachements reste à faire |
 | FO24 | Volatilité implicite | fait (lot 8 : volatilité implicite (VIX, VXN, RVX, VXD, GVZ, OVX, EVZ) à côté de la prévision HAR, rapport implicite / prévue, sur la fiche d'un actif) |
 | FO25 | Détecteur de paires cointégrées | fait (lot 8 : `patrick research pairs`, Engle-Granger, couverture, demi-vie, correction de Benjamini-Hochberg du nombre de paires) |
-| FO26 | Planification des lots par créneau | à faire (lot 9) |
-| FO27 | Assistant de lancement par objectif | à faire (lot 9) |
-| FO28 | Résumé du matin lisible sur téléphone | à faire (lot 9) |
-| FO29 | Mode démo sur base synthétique | à faire (lot 9) |
+| FO26 | Planification des lots par créneau | fait (lot 9 : « Démarrer à » dans la file : le worker attend l'heure choisie sans prendre de job ni compter d'inactivité ; `/api/queue/hold`) |
+| FO27 | Assistant de lancement par objectif | fait (lot 9 : `patrick launch-advice --minutes 30 [--target X]` : profil le plus approfondi dont la durée médiane réelle tient dans le temps donné) |
+| FO28 | Résumé du matin lisible sur téléphone | fait, réglage à toi (lot 9 : `patrick morning`, `patrick-matin.html` sans montant ni compte dans le dossier `morning_folder`, étape de nuit) |
+| FO29 | Mode démo sur base synthétique | fait (lot 9 : `patrick demo` : base synthétique dans son propre dossier et interface, sans toucher aux vraies données) |
 | FO30 | Sauvegarde hors site chiffrée | fait, mise en place à toi (lots 4-5 : `patrick storage offsite --to <dossier>` et `offsite-restore` : instantané, zstd ou gzip, AES-256-GCM, phrase dans `PATRICK_BACKUP_PASSPHRASE`, 3 copies gardées ; dépendance facultative `[backup]`) |
 
 ## Visuel (VI)
 
 | # | Proposition | Statut |
 |---|---|---|
-| VI1 | Cône de prévision | à faire (lot 10) |
-| VI2 | Treemap d'un fonds | à faire (lot 10) |
-| VI3 | Cascade du rendement | à faire (lot 10) |
-| VI4 | Carte de corrélation des positions | à faire (lot 10) |
-| VI5 | Calendrier en carte de chaleur | à faire (lot 10) |
-| VI6 | Nuage risque / rendement des fonds | à faire (lot 10) |
-| VI7 | Courbe ROC avec curseur de seuil | à faire (lot 10) |
-| VI8 | Entonnoir de sélection des variables | à faire (lot 10) |
-| VI9 | Importance des familles de variables au fil des plis | à faire (lot 10) |
-| VI10 | Frise de la nuit | à faire (lot 10) |
-| VI11 | Jauge du disque et des caches | à faire (lot 10) |
-| VI12 | Étapes d'un run en frise | à faire (lot 10) |
-| VI13 | Mur de signaux | à faire (lot 10) |
-| VI14 | Carte du monde des marchés | à faire (lot 10) |
-| VI15 | Mini-courbes dans les tableaux | à faire (lot 10) |
-| VI16 | Pastille de fraîcheur sur chaque chiffre | à faire (lot 10) |
-| VI17 | Distribution des rendements d'un actif | à faire (lot 10) |
-| VI18 | Week-ends et fériés grisés | à faire (lot 10) |
-| VI19 | Échelle logarithmique | à faire (lot 10) |
-| VI20 | Zoom par sélection et mini-carte | à faire (lot 10) |
-| VI21 | Couleur fixe par famille de modèle | à faire (lot 10) |
-| VI22 | Icône de classe d'actifs | à faire (lot 10) |
-| VI23 | Comparateur de runs en « diff » | à faire (lot 10) |
-| VI24 | Notes libres datées sur les courbes | à faire (lot 10) |
-| VI25 | Plein écran d'un graphique | à faire (lot 10) |
-| VI26 | Synthèse personnalisable | à faire (lot 10) |
-| VI27 | Mode dense des tableaux | à faire (lot 10) |
-| VI28 | Thème haute lisibilité | à faire (lot 10) |
-| VI29 | Onglet du navigateur vivant | à faire (lot 10) |
-| VI30 | Écran de démarrage du lanceur | à faire (lot 10) |
+| VI1 | Cône de prévision | à faire : cône de prévision sur la courbe d'un actif (la prévision HAR existe, le dessin dans le graphique de cours reste à écrire) |
+| VI2 | Treemap d'un fonds | à faire |
+| VI3 | Cascade du rendement | fait (lot 10 : cascade gain avant frais → frais → financement → gain net dans le panneau d'un fonds) |
+| VI4 | Carte de corrélation des positions | à faire |
+| VI5 | Calendrier en carte de chaleur | fait (lot 10 : calendrier des rendements quotidiens des 12 derniers mois sous la perte depuis le plus haut d'un fonds) |
+| VI6 | Nuage risque / rendement des fonds | à faire |
+| VI7 | Courbe ROC avec curseur de seuil | déjà fait en partie : courbe ROC dans l'analyse d'un run (`analysis/sec_predict.py`) ; le curseur de seuil reste à faire |
+| VI8 | Entonnoir de sélection des variables | à faire |
+| VI9 | Importance des familles de variables au fil des plis | déjà fait en partie : stabilité des variables d'un pli à l'autre (Jaccard) sur la page d'un run ; vue par famille à faire |
+| VI10 | Frise de la nuit | à faire |
+| VI11 | Jauge du disque et des caches | déjà fait : disque et tailles des dossiers de données sur /diagnostics (`analysis/diagnostics.py`) |
+| VI12 | Étapes d'un run en frise | fait (lot 10 : frise des étapes en tête de la section « Durées » de la page d'un run) |
+| VI13 | Mur de signaux | déjà fait : grand tableau cibles × horizons de /predictions, couleur par direction et fiabilité |
+| VI14 | Carte du monde des marchés | à faire |
+| VI15 | Mini-courbes dans les tableaux | déjà fait en partie (mini-courbes de /donnees et des résultats) ; /predictions et /runs à faire |
+| VI16 | Pastille de fraîcheur sur chaque chiffre | déjà fait en partie : page /data-freshness ; pastille sur chaque chiffre à faire |
+| VI17 | Distribution des rendements d'un actif | déjà fait : distributions des rendements dans /exploration |
+| VI18 | Week-ends et fériés grisés | fait (lot 10 : trous de plus de 4 jours grisés sur tous les graphiques du moteur commun, week-ends ordinaires exclus) |
+| VI19 | Échelle logarithmique | fait (lot 10 : bouton « Échelle logarithmique » sur tous les graphiques en ligne du moteur commun) |
+| VI20 | Zoom par sélection et mini-carte | déjà fait : zoom par sélection, déplacement et molette dans le moteur commun (D23) ; mini-carte à faire |
+| VI21 | Couleur fixe par famille de modèle | à faire |
+| VI22 | Icône de classe d'actifs | à faire |
+| VI23 | Comparateur de runs en « diff » | fait (lot 10 : lignes différentes surlignées et case « Seulement les différences » dans le comparateur de runs) |
+| VI24 | Notes libres datées sur les courbes | à faire |
+| VI25 | Plein écran d'un graphique | fait (lot 10 : bouton « Plein écran » sur les graphiques du moteur commun) |
+| VI26 | Synthèse personnalisable | à faire |
+| VI27 | Mode dense des tableaux | fait (lot 10 : « Tableaux denses » dans /reglages, gardé par ce navigateur) |
+| VI28 | Thème haute lisibilité | fait (lot 10 : « Haute lisibilité » dans /reglages : corps 112 %, texte secondaire au contraste plein, focus épais) |
+| VI29 | Onglet du navigateur vivant | fait (lot 10 : titre de l'onglet « 45 % · cible » pendant un run, ⏸ en pause) |
+| VI30 | Écran de démarrage du lanceur | déjà fait : fenêtre de démarrage du lanceur (`desktop/ui.py`, `_show_splash`) |
+
+## Demande ajoutée en cours de chantier (25/11)
+
+| # | Demande | Statut |
+|---|---|---|
+| X1 | Mettre à jour la copie stable même si un entraînement est en cours | fait (lot 10 : Réglages > Mise à jour, ou `python -m patrick.desktop update --after-run / --now`. « À la fin du run en cours » : le worker lit la demande entre deux jobs, s'arrête, l'assistant attend sa fin, met à jour, relance le serveur, qui relance la file ; le run en cours finit sur l'ancienne version. « Maintenant » : le worker est arrêté, la mise à jour passe, le run reprend où il en était (reprise du scan, A14), sa fin sur la nouvelle version. Jamais deux versions dans le même processus) |
+

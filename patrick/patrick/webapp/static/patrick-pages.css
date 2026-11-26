@@ -2344,3 +2344,38 @@ html[data-sidebar="collapsed"] .sidebar-pins { display: none; }
 .run-qa-form textarea { flex: 1 1 320px; min-width: 0; font: inherit; padding: 8px 10px; background: var(--surface-2); color: var(--text); border: 1px solid var(--line-strong); border-radius: var(--radius-md, 8px); resize: vertical; }
 .run-qa-answer { margin-top: 12px; }
 .run-qa-text { white-space: pre-wrap; margin: 0 0 8px; }
+
+/* AM25 (25/11) : erreur de validation sous le champ concerné */
+.field-error { display: block; margin-top: 4px; font-size: var(--text-xs, 12px); color: var(--error-ink); }
+[aria-invalid="true"] { border-color: var(--neg) !important; }
+
+/* VI25 (25/11) : un graphique en plein écran occupe la hauteur de l'écran */
+:fullscreen { background: var(--bg); padding: 16px; overflow: auto; }
+:fullscreen .pp-stage { height: calc(100vh - 140px) !important; }
+.pp-btn[aria-pressed="true"] { color: var(--brand); }
+
+/* VI23 (25/11) : comparateur de runs en « diff » */
+.compare-runs-table tr.row-diff td { background: var(--brand-soft, rgba(255, 140, 0, 0.08)); }
+.compare-runs-table tr.row-diff th { box-shadow: inset 3px 0 0 var(--brand); }
+.compare-runs-table.only-diff tr.row-same { display: none; }
+
+/* VI12 (25/11) : frise des étapes d'un run */
+.phase-frieze { display: flex; height: 22px; border-radius: 6px; overflow: hidden; margin: 6px 0 12px; border: 1px solid var(--line); }
+.phase-seg { flex: 0 0 var(--w); min-width: 2px; font-size: 11px; line-height: 22px; padding: 0 6px; white-space: nowrap; overflow: hidden;
+             text-overflow: ellipsis; color: var(--bg); }
+.phase-0 { background: var(--brand); } .phase-1 { background: var(--pos); } .phase-2 { background: var(--text-2); }
+.phase-3 { background: var(--neg); } .phase-4 { background: var(--brand-soft); color: var(--text); } .phase-5 { background: var(--line-strong); color: var(--text); }
+
+/* VI3 (25/11) : cascade du rendement d'un fonds */
+.fund-waterfall { display: grid; gap: 4px; margin: 8px 0 12px; max-width: 640px; }
+.wf-row { display: grid; grid-template-columns: minmax(110px, 30%) 1fr auto; gap: 8px; align-items: center; font-size: 12px; }
+.wf-track { height: 10px; background: var(--neutral-soft); border-radius: 5px; overflow: hidden; }
+.wf-bar { display: block; height: 100%; width: var(--w); border-radius: 5px; }
+.wf-pos { background: var(--pos); } .wf-neg { background: var(--neg); }
+.wf-total .wf-label { font-weight: 600; }
+
+/* VI5 (25/11) : calendrier des rendements quotidiens d'un fonds */
+.ret-calendar { margin: 8px 0 14px; overflow-x: auto; }
+.ret-cal-grid { display: grid; grid-template-rows: repeat(5, 10px); grid-auto-columns: 10px; grid-auto-flow: column; gap: 2px; width: max-content; }
+.ret-cell { width: 10px; height: 10px; border-radius: 2px; }
+.ret-cell.is-up { background: var(--pos); } .ret-cell.is-down { background: var(--neg); }

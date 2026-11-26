@@ -179,7 +179,25 @@
                      sym: normalize(a.s), full: normalize(shown), bare: normalize(cut >= 0 ? shown.slice(cut + 3) : shown) };
         });
     }
+    /* AM13 (25/11) : notions du dictionnaire, cours et derniers runs (/api/search-index), chargés comme les actifs, jamais avant la saisie. */
+    var extra = null, extraLoading = false;
+    function loadExtra() {
+        if (extra !== null || extraLoading) return;
+        extraLoading = true;
+        fetch("/api/search-index", { credentials: "same-origin" })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (rows) {
+                extra = rows.map(function (x) {
+                    return { url: x.u, label: x.l, group: x.g, slug: x.k, asset: true, hint: x.g,
+                             sym: normalize(x.a || ""), full: normalize(x.l), bare: normalize(x.l) };
+                });
+                if (dialog && !dialog.hidden) render();
+            })
+            .catch(function () { extra = []; })
+            .then(function () { extraLoading = false; });
+    }
     function loadAssets() {
+        loadExtra();
         if (assets !== null || assetsLoading) return;
         var key = "patrick.asset-index." + (document.documentElement.lang || "fr");
         try {
@@ -223,6 +241,7 @@
     function render() {
         var q = normalize(input.value.trim());
         var pool = (q && assets) ? items.concat(assets) : items;
+        if (q && extra) pool = pool.concat(extra);
         var assetCount = 0;
         shown = pool
             .map(function (it, idx) { return { it: it, s: score(it, q), idx: idx }; })
@@ -675,4 +694,13 @@
     relTimes();
     window.setInterval(relTimes, 60000);
     document.addEventListener("patrick:content", relTimes);           // fragment chargé par lazy.js
+    /* VI27 / VI28 (25/11) : cases [data-local-pref] de /reglages : préférence d'affichage gardée dans ce navigateur, appliquée tout de suite. */
+    document.querySelectorAll("input[data-local-pref]").forEach(function (box) {
+        var key = box.getAttribute("data-local-pref"), on = box.getAttribute("data-on"), attr = box.getAttribute("data-attr");
+        try { box.checked = window.localStorage.getItem(key) === on; } catch (e) { box.checked = root.getAttribute(attr) === on; }
+        box.addEventListener("change", function () {
+            try { if (box.checked) window.localStorage.setItem(key, on); else window.localStorage.removeItem(key); } catch (e) { /* stockage bloqué */ }
+            if (box.checked) root.setAttribute(attr, on); else root.removeAttribute(attr);
+        });
+    });
 })();

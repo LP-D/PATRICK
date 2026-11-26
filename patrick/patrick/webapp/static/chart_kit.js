@@ -197,6 +197,8 @@
         right: '<path d="m9 18 6-6-6-6"/>',
         png: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
         csv: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
+        log: '<path d="M4 20c4 0 6-2 8-6s4-10 8-10"/><path d="M4 4v16h16"/>',
+        full: '<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/>',
     };
 
     // D23 (24/11) : données d'un graphique en CSV -- une ligne par abscisse (union des séries), une colonne par série ; dates ISO sur un
@@ -258,6 +260,21 @@
         if (o.zoomable) {
             tools.appendChild(el("span", "pp-hint", { text: tr("chart_hint", "Drag to zoom · double-click to reset") }));
             tools.appendChild(bOut); tools.appendChild(bIn); tools.appendChild(bReset);
+        }
+        // VI19 (25/11) : échelle logarithmique (longues périodes : une hausse de 10 % a la même hauteur en 2005 et en 2025) ;
+        // VI25 : plein écran. Ni l'un ni l'autre sur une vignette ou un graphique en barres.
+        var logY = !!o.logScale;
+        if (!isBar && !o.compact) {
+            var bLog = iconBtn("log", tr("chart_log", "Log scale")), bFull = iconBtn("full", tr("chart_full", "Full screen"));
+            bLog.setAttribute("aria-pressed", logY ? "true" : "false");
+            bLog.addEventListener("click", function () { logY = !logY; bLog.setAttribute("aria-pressed", logY ? "true" : "false"); schedule(); });
+            bFull.addEventListener("click", function () {
+                if (document.fullscreenElement) { document.exitFullscreen(); return; }
+                if (host.requestFullscreen) host.requestFullscreen().catch(function () { /* refusé par le navigateur */ });
+            });
+            tools.appendChild(bLog);
+            if (document.fullscreenEnabled) tools.appendChild(bFull);
+            document.addEventListener("fullscreenchange", function () { if (!destroyed) schedule(); });
         }
         if (o.exportable !== false && !o.compact) {      // D23 : l'image telle qu'affichée, et les données en CSV (pas sur une vignette)
             var fileBase = String(o.exportName || o.title || "graphique").replace(/[^\w\-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60) || "graphique";
@@ -388,7 +405,9 @@
                 geo = null; setAria(null); overClear(); updateChrome(); tip.classList.add("hidden"); return;
             }
             var lo = ye[0], hi = ye[1], pad = (hi - lo) * 0.06 || 0.5;
-            lo -= (isBar && lo >= 0) ? 0 : pad; hi += pad;
+            var useLog = logY && !isBar && !candle && lo > 0;           // une valeur nulle ou négative n'a pas de logarithme : échelle linéaire
+            if (useLog) { lo = ye[0] / 1.04; hi = ye[1] * 1.04; }
+            else { lo -= (isBar && lo >= 0) ? 0 : pad; hi += pad; }
             var padT = 10, padB = 24, padR = 14, padL = 12;
             var volOn = fin && hasVol, fullH = H - padT - padB, volH = volOn ? Math.max(30, Math.round(fullH * 0.2)) : 0;
             var ph = fullH - (volOn ? volH + 8 : 0);                              // hauteur de la zone de prix (le volume est dessous)
@@ -400,7 +419,8 @@
             if (fin) { padL = 8; padR = Math.min(Math.max(labelW + 6, 54), W * 0.4); } else padL = Math.min(labelW, W * 0.4);
             var pw = W - padL - padR;
             function X(x) { return padL + (x - vx0) / (vx1 - vx0) * pw; }
-            function Y(y) { return padT + (1 - (y - lo) / (hi - lo)) * ph; }
+            var lnLo = useLog ? Math.log(lo) : 0, lnSpan = useLog ? (Math.log(hi) - lnLo) || 1 : 0;
+            function Y(y) { return useLog ? padT + (1 - (Math.log(Math.max(y, lo)) - lnLo) / lnSpan) * ph : padT + (1 - (y - lo) / (hi - lo)) * ph; }
             // variation de la fenêtre (en-tête, couleur de tendance, ligne de départ) sur la première série visible
             var ref0 = visible[0], ch = (fin && ref0) ? windowChange(ref0.xs, ref0.ys, vx0, vx1) : null;
             var trendCol = (fin && o.trend && ch) ? token(ch.abs >= 0 ? "--pos" : "--neg") : null;
@@ -418,6 +438,19 @@
             ctx.textBaseline = "alphabetic"; ctx.textAlign = "center";
             var xTicks = axisX(vx0, vx1, pw, ctx);
             if (fin) { ctx.strokeStyle = line; ctx.beginPath(); ctx.moveTo(padL, padT + fullH + 0.5); ctx.lineTo(W - padR, padT + fullH + 0.5); ctx.stroke(); }
+            // VI18 (25/11) : trous de données grisés (plus de 4 jours sans point : jours fériés longs, série interrompue, cotation suspendue),
+            // pour qu'une ligne droite tracée par-dessus un trou ne passe pas pour un mouvement réel. Les week-ends ordinaires ne sont pas grisés.
+            if (timeAxis && visible[0] && o.gaps !== false) {
+                var gxs = visible[0].xs, GAP = 4 * 86400000;
+                ctx.fillStyle = token("--neutral-soft");
+                for (var gi = 1; gi < gxs.length; gi++) {
+                    var g0 = gxs[gi - 1], g1 = gxs[gi];
+                    if (g1 - g0 > GAP && g1 > vx0 && g0 < vx1) {
+                        var gx0 = Math.max(padL, X(g0)), gx1 = Math.min(W - padR, X(g1));
+                        if (gx1 - gx0 >= 2) ctx.fillRect(gx0, padT, gx1 - gx0, ph);
+                    }
+                }
+            }
             xTicks.forEach(function (tk) {
                 var xx = Math.round(X(tk.x)) + 0.5;
                 ctx.strokeStyle = grid;

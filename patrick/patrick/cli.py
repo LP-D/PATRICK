@@ -315,7 +315,7 @@ def worker_cmd(
             if jobs_db.worker_is_alive(conn):
                 typer.echo("Un worker vivant tient déjà la file : rien à faire.")
                 return
-            if not conn.execute("SELECT 1 FROM job WHERE status = 'queued' LIMIT 1").fetchone():
+            if not conn.execute("SELECT 1 FROM job WHERE status IN ('queued', 'running') LIMIT 1").fetchone():
                 typer.echo("Aucun job en file : rien à faire.")
                 return
         finally:
@@ -1842,6 +1842,82 @@ def wealth_import_folder_cmd(
         typer.echo(f"{f['name']} : {f['written']} écrit(s), {f['skipped']} doublon(s) sauté(s)" + (f" — refusé : {f['reason']}" if f["reason"] else ""))
     if not out["files"]:
         typer.echo("Aucun relevé à importer.")
+
+
+@app.command(name="launch-advice")
+def launch_advice_cmd(
+    minutes: float = typer.Option(..., "--minutes", help="Temps disponible pour l'entraînement"),
+    target: str = typer.Option(None, "--target", help="Cible (ses runs passés comptent d'abord)"),
+) -> None:
+    """Profil d'entraînement le plus approfondi qui tient dans le temps donné, d'après les durées réelles des runs de ce PC (FO27)."""
+    from patrick.tracking import db as trackdb
+    from patrick.tracking import launch_advice
+
+    conn = trackdb.connect()
+    try:
+        out = launch_advice.advise(conn, minutes, target)
+    finally:
+        conn.close()
+    typer.echo(f"Durées médianes ({out['scope'] or 'tous les runs'}) :")
+    for p in out["profiles"]:
+        typer.echo(f"  {p['key']:<14} {p['median_min']:>7.1f} min ({p['n']} runs)")
+    typer.echo(f"Conseil pour {minutes:.0f} min : {out['recommended'] or 'aucun profil ne tient (essayer « quick » sur moins de variables)'}")
+
+
+@app.command(name="morning")
+def morning_cmd(to: str = typer.Option(None, "--to", help="Dossier synchronisé (défaut : réglage morning_folder)")) -> None:
+    """Résumé du matin lisible sur téléphone (FO28) : patrick-matin.html, sans montant ni compte, dans un dossier synchronisé."""
+    from patrick.core import settings
+    from patrick.live import morning
+    from patrick.tracking import db as trackdb
+    from patrick.webapp import instruments
+
+    folder = to or settings.load().get("morning_folder")
+    if not folder:
+        typer.echo("Résumé du matin non réglé (réglage morning_folder ou --to) : rien à faire.")
+        return
+    conn = trackdb.connect()
+    try:
+        path = morning.write(conn, folder, name_of=instruments.display)
+    except FileNotFoundError as exc:
+        typer.echo(f"Reporté : {exc}")
+        return
+    finally:
+        conn.close()
+    typer.echo(f"Résumé écrit : {path}")
+
+
+@app.command(name="demo")
+def demo_cmd(
+    folder: str = typer.Option(None, "--folder", help="Dossier de la base de démonstration (défaut : un dossier temporaire)"),
+    port: int = typer.Option(8765, "--port", help="Port de l'interface"),
+) -> None:
+    """Interface sur une base SYNTHÉTIQUE en une commande (FO29), sans toucher aux vraies données : pour montrer PATRICK."""
+    import datetime as _dt
+    import importlib.util
+    import sys as _sys
+    import tempfile
+    from pathlib import Path
+
+    root = Path(folder) if folder else Path(tempfile.mkdtemp(prefix="patrick-demo-"))
+    root.mkdir(parents=True, exist_ok=True)
+    db = root / "patrick.db"
+    if not db.exists():
+        spec = importlib.util.spec_from_file_location("make_demo_db", Path(__file__).resolve().parents[1] / "scripts" / "make_demo_db.py")
+        module = importlib.util.module_from_spec(spec)
+        _sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        module.build(str(db), _dt.date.today())  # noqa: DTZ011 -- date locale, comme la base de démonstration
+    for name, value in {"PATRICK_DB_PATH": str(db), "PATRICK_LIVE_REFRESH": "0", "PATRICK_NO_AUTO_WORKER": "1",
+                        "PATRICK_DATA_ROOT": str(root / "data"), "PATRICK_CACHE_ROOT": str(root / "cache"),
+                        "PATRICK_FEATURE_CACHE_ROOT": str(root / "feature_cache"), "PATRICK_SETTINGS_PATH": str(root / "settings.json"),
+                        "PATRICK_INSTRUMENT_LOOKUP": "0", "PATRICK_ADVICE_PREWARM": "0"}.items():
+        os.environ[name] = value
+    (root / "data").mkdir(exist_ok=True)
+    typer.echo(f"Base de démonstration (chiffres tirés au hasard) : {db}")
+    typer.echo(f"Interface : http://127.0.0.1:{port}/  (Ctrl+C pour arrêter)")
+    import uvicorn
+    uvicorn.run("patrick.webapp.app:app", host="127.0.0.1", port=port)
 
 
 

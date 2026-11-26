@@ -7,7 +7,16 @@ On suit la branche `stable`, que la CI avance sur un commit de `main` seulement 
 
 Règles de sécurité : on ne touche qu'à un dépôt PROPRE (aucune modification locale suivie) qui est sur `main`
 et dont la version locale est un ancêtre de `origin/stable` (avance rapide uniquement, jamais de fusion ni
-d'écrasement); on ne met jamais à jour pendant un entraînement.
+d'écrasement); on ne met pas à jour le code SOUS un entraînement en cours.
+
+Mise à jour pendant un entraînement (demande du 25/11), deux façons, sans jamais mélanger deux versions dans le même processus :
+
+- « à la fin du run en cours » (`request_after_run`) : une demande est posée ; le worker la lit entre deux jobs, s'arrête proprement et
+  lance l'assistant de relance (`patrick.desktop relaunch --update --wait-pid`), qui attend sa fin, met à jour et relance le serveur ;
+  le serveur relance un worker si la file n'est pas vide. Le run en cours finit entièrement sur l'ancienne version.
+- « maintenant » (`apply(stop_worker=True)`) : le worker est arrêté, la mise à jour passe, le serveur relancé remet le job interrompu en
+  file et un nouveau worker le reprend où il en était (reprise au niveau du scan, A14 : les ajustements déjà faits ne sont pas refaits).
+  La fin de ce run tourne sur la nouvelle version ; son journal le dit.
 """
 from __future__ import annotations
 
@@ -23,6 +32,7 @@ from patrick.desktop import runtime
 BRANCH = "main"            # branche locale qui doit être extraite
 RELEASE_REF = "stable"     # branche distante suivie : le dernier commit dont la CI est verte
 STATE_NAME = "update_state.json"
+PENDING_NAME = "update_pending.json"
 _GIT_ENV = {"GIT_TERMINAL_PROMPT": "0", "GIT_HTTP_LOW_SPEED_LIMIT": "1000", "GIT_HTTP_LOW_SPEED_TIME": "10"}
 
 Progress = Callable[[str], None]
@@ -47,6 +57,64 @@ def _save_state(**fields) -> None:
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(data, indent=1, sort_keys=True), encoding="utf-8")
     os.replace(tmp, path)
+
+
+def pending_path() -> Path:
+    return runtime.data_dir() / PENDING_NAME
+
+
+def request_after_run() -> dict:
+    """Demande une mise à jour à la fin du run en cours (lue par le worker entre deux jobs)."""
+    data = {"requested_at": _now()}
+    path = pending_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return data
+
+
+def pending() -> dict | None:
+    try:
+        data = json.loads(pending_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def clear_pending() -> None:
+    try:
+        pending_path().unlink()
+    except OSError:
+        pass
+
+
+def spawn_after_worker(worker_pid: int) -> None:
+    """Lancé par le worker qui s'arrête pour une mise à jour demandée : l'assistant attend sa fin, met à jour, relance le serveur."""
+    runtime.spawn_detached([runtime.console_python(), "-m", "patrick.desktop", "relaunch", "--update", "--wait-pid", str(worker_pid)],
+                           cwd=runtime.project_dir(), log=runtime.log_dir() / "relaunch.log")
+
+
+def stop_workers(wait_s: float = 30.0) -> int:
+    """Arrête les processus `patrick.cli worker` (mise à jour « maintenant ») ; le job interrompu sera repris au démarrage suivant."""
+    import contextlib
+
+    import psutil
+
+    # `runtime.kill_process_tree` épargne exprès les workers (un run survit à la fermeture du serveur) : ici on les vise, eux et leurs
+    # processus de calcul.
+    victims, n_workers = [], 0
+    for proc in psutil.process_iter(["cmdline"]):
+        if runtime.is_worker_cmdline(proc.info.get("cmdline")):
+            with contextlib.suppress(psutil.NoSuchProcess):
+                victims.extend([*proc.children(recursive=True), proc])
+                n_workers += 1
+    for p in victims:
+        with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
+            p.terminate()
+    _, alive = psutil.wait_procs(victims, timeout=wait_s)
+    for p in alive:
+        with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
+            p.kill()
+    return n_workers
 
 
 def _now() -> str:
@@ -145,7 +213,8 @@ def apply(*, repo: Path | None = None, progress: Progress | None = None,
           stop_server: Callable[[], object] | None = None,
           worker_running: Callable[[], bool] = runtime.worker_running,
           backup: Callable[[Path], tuple[int, str]] = _backup_database,
-          pip_install: Callable[[Path], tuple[int, str]] = _pip_install) -> dict:
+          pip_install: Callable[[Path], tuple[int, str]] = _pip_install,
+          stop_worker: bool = False, stop: Callable[[], int] | None = None) -> dict:
     """Met à jour si une nouvelle version existe. Renvoie `{"status", "message", "from", "to", "deps"}` avec `status`
     parmi `uptodate`, `updated`, `skipped`, `failed`. Ne lève jamais."""
     repo = repo or runtime.repo_root()
@@ -156,8 +225,15 @@ def apply(*, repo: Path | None = None, progress: Progress | None = None,
         return {"status": "uptodate", "message": info["message"]}
     if info["state"] != "available":
         return {"status": "skipped", "message": info["message"]}
+    interrupted = False
     if worker_running():
-        return {"status": "skipped", "message": "Mise à jour reportée : un entraînement est en cours."}
+        if not stop_worker:
+            return {"status": "skipped", "message": "Mise à jour reportée : un entraînement est en cours."}
+        say("Arrêt de l'entraînement en cours (il reprendra où il en était)…")
+        (stop or stop_workers)()
+        if worker_running():
+            return {"status": "skipped", "message": "Mise à jour reportée : l'entraînement en cours n'a pas pu être arrêté."}
+        interrupted = True
 
     git, project = _Git(repo), repo / "patrick"
     local, remote = info["local"], info["remote"]
@@ -179,5 +255,6 @@ def apply(*, repo: Path | None = None, progress: Progress | None = None,
             return {"status": "failed", "from": local, "message": "La mise à jour des composants a échoué : "
                                                                    f"PATRICK reste sur la version précédente. {detail[-300:]}"}
     _save_state(checked_at=_now(), available=False, last_update={"at": _now(), "from": local, "to": remote})
-    return {"status": "updated", "from": local, "to": remote, "deps": deps,
-            "message": f"Mis à jour : {local[:7]} -> {remote[:7]}" + (" (composants réinstallés)" if deps else "")}
+    return {"status": "updated", "from": local, "to": remote, "deps": deps, "interrupted": interrupted,
+            "message": f"Mis à jour : {local[:7]} -> {remote[:7]}" + (" (composants réinstallés)" if deps else "")
+                       + (" ; l'entraînement interrompu reprend où il en était, avec la nouvelle version" if interrupted else "")}

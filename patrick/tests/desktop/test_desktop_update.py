@@ -218,3 +218,41 @@ def test_being_offline_is_not_mistaken_for_a_missing_validated_version(world):
     git(world.stable, "remote", "set-url", "origin", str(world.remote.parent / "nulle-part.git"))
     info = update.check(world.stable)
     assert info["state"] == "unavailable" and "stable" not in info["message"].split("injoignable")[0]
+
+
+# --------------------------------------------------------------------------- mise à jour pendant un entraînement (25/11)
+
+def test_during_training_the_update_waits_unless_asked_to_stop_the_worker(world):
+    world.publish("a.txt", "1", "feat: x")
+    result, calls = _apply(world, worker_running=lambda: True)
+    assert result["status"] == "skipped" and calls["backup"] == 0
+
+
+def test_now_stops_the_worker_updates_and_says_the_run_resumes(world):
+    world.publish("a.txt", "1", "feat: x")
+    state = {"running": True, "stopped": 0}
+
+    def stop_workers():
+        state["running"] = False
+        state["stopped"] += 1
+        return 1
+
+    result, calls = _apply(world, worker_running=lambda: state["running"], stop_worker=True, stop=stop_workers)
+    assert result["status"] == "updated" and result["interrupted"] is True and state["stopped"] == 1
+    assert "reprend où il en était" in result["message"] and calls["backup"] == 1
+    assert (world.stable / "a.txt").read_text(encoding="utf-8") == "1"
+
+
+def test_now_gives_up_if_the_worker_cannot_be_stopped(world):
+    world.publish("a.txt", "1", "feat: x")
+    result, calls = _apply(world, worker_running=lambda: True, stop_worker=True, stop=lambda: 0)
+    assert result["status"] == "skipped" and calls["backup"] == 0
+
+
+def test_after_run_request_is_stored_then_cleared():
+    update.clear_pending()
+    assert update.pending() is None
+    update.request_after_run()
+    assert update.pending()["requested_at"]
+    update.clear_pending()
+    assert update.pending() is None

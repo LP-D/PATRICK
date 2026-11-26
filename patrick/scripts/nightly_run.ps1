@@ -158,6 +158,8 @@ Step "autres predictions" @($Predict, "--base-dir", $RepoDir, "--log-file", $Pre
 Step "import des releves" @("-m", "patrick.cli", "wealth", "import-folder")
 # Alertes de prix et de changement de signal (FO16 du 25/11) : `patrick alerts add ...` ; sans alerte, ne fait rien.
 Step "alertes" @("-m", "patrick.cli", "alerts", "check")
+# Resume du matin pour telephone (FO28 du 25/11, reglage morning_folder ; sinon ne fait rien).
+Step "resume du matin" @("-m", "patrick.cli", "morning")
 # Re-entrainement automatique des runs conseilles (FO9 du 25/11), dans le budget hebdomadaire `auto_retrain_per_week` (0 par defaut :
 # ne fait rien). En dernier : les jobs partent apres les predictions, jamais en concurrence avec elles.
 Step "reentrainement automatique" @("-m", "patrick.cli", "retrain", "auto")
