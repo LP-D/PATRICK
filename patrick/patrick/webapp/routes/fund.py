@@ -540,6 +540,36 @@ def register(app: FastAPI, templates, context) -> None:
             return autopilot.preview(conn, strategy_id, service.current_date(), settings)
         return await run_in_threadpool(_call, run)
 
+    @app.get("/fragments/fund-correlation/{strategy_id}")
+    def fund_correlation_fragment(request: Request, strategy_id: str):
+        """VI4 (26/11) : corrélation des rendements quotidiens (un an) des positions ouvertes, ordonnée par regroupement hiérarchique."""
+        import datetime as _dt
+
+        from patrick.fund import prices as fund_prices
+        from patrick.wealth import prices as wealth_prices
+        from patrick.webapp import fund_visuals
+        conn = trackdb.connect()
+        try:
+            strategy = store.get_strategy(conn, strategy_id)
+            if strategy is None:
+                raise HTTPException(status_code=404, detail="stratégie introuvable")
+            snap = service.strategy_snapshot(conn, strategy)
+            symbols = sorted({p["symbol"] for p in snap["positions"] if p.get("status") == "open" and p.get("symbol")})
+            since = (service.current_date() - _dt.timedelta(days=400)).isoformat()
+            # cours déjà stockés pour le fonds (table fund_price) : ceux qui servent à sa valorisation, sans réseau
+            series = {}
+            for sym in symbols:
+                bars = fund_prices.load_bars(conn, sym, since=since)
+                series[sym] = bars["close"] if bars is not None else None
+        finally:
+            conn.close()
+        missing = [s for s, v in series.items() if v is None]
+        if missing:                                   # repli : séries du cache général (un symbole jamais valorisé par le fonds)
+            provider = wealth_prices.make_provider(allow_network=False)
+            series.update({s: provider(s) for s in missing})
+        corr = fund_visuals.correlation(series)
+        return templates.TemplateResponse(request, "_fund_correlation.html", {**context(request), "corr": corr})
+
     @app.get("/api/fund/strategies/{strategy_id}/report.pdf")
     def api_fund_monthly_report(strategy_id: str, month: str | None = None):
         """FO14/FO15 (25/11) : rapport mensuel du fonds en PDF (performance, attribution, ordres, positions, stress tests)."""

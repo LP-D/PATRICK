@@ -156,6 +156,14 @@
             sync: "fund-chart",
         });
         drawCalendar(pts);
+        var corr = document.querySelector(".fund-corr[data-corr-url]");
+        if (corr) corr.addEventListener("toggle", function () {            // VI4 : calculée seulement si on la regarde
+            if (!corr.open || corr.dataset.loaded) return;
+            corr.dataset.loaded = "1";
+            fetch(corr.getAttribute("data-corr-url"), { credentials: "same-origin" })
+                .then(function (r) { return r.ok ? r.text() : ""; })
+                .then(function (html) { corr.querySelector(".fund-corr-body").innerHTML = html; });
+        });
         // D12 (24/11) : perte depuis le plus haut de la valeur nette, sous la courbe, même réticule (`sync`).
         var ddHost = document.getElementById("fund-chart-dd");
         if (ddHost && pts.length > 1) {

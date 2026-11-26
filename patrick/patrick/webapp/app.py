@@ -69,6 +69,7 @@ from patrick.webapp import (
     cached_views,
     forms,
     forms_rl,
+    fund_visuals,
     icons,
     instruments,
     launch_batches,
@@ -85,6 +86,7 @@ from patrick.webapp import (
     stats_help,
     todo_actions,
     view_cache,
+    visual_tags,
 )
 from patrick.webapp.glossary.core import GLOSSARY, TERM_LABEL_KEYS
 from patrick.webapp.glossary.extra import CATEGORIES as GLOSSARY_CATEGORIES
@@ -235,8 +237,12 @@ templates.env.globals["utility_links"] = nav_registry.utility_links
 # Bandeau défilant des plus fortes variations (base_v2.html, sur toutes les pages) : lu dans le cache en mémoire de `alerts`,
 # jamais recalculé à l'affichage.
 templates.env.globals["movers_snapshot"] = alerts.get_cached
+templates.env.globals["world_map"] = alerts.world_map
 # Design system v3: inline Lucide SVG icons (webapp/icons.py).
 templates.env.globals["icon"] = icons.icon
+# visuels des fonds calculés côté serveur (VI2, VI6, 26/11)
+templates.env.globals["fund_tiles"] = fund_visuals.position_tiles
+templates.env.globals["fund_scatter"] = fund_visuals.risk_return_points
 templates.env.globals["ui_t"] = i18n.ui_t
 # A27 : la carte « Questions sur ce run » n'existe que si une clé Claude est posée (API payante à part, désactivée par défaut).
 def _run_qa_enabled() -> bool:
@@ -247,6 +253,9 @@ def _run_qa_enabled() -> bool:
 templates.env.globals["run_qa_enabled"] = _run_qa_enabled
 # Noms d'affichage des instruments (webapp/instruments.py) : `{{ symbole | iname }}` (texte) ou `| iname_tip` (texte + symbole au survol).
 templates.env.filters["iname"] = instruments.display
+templates.env.filters["iname_short"] = instruments.name_of     # le nom seul, sans genre (« S&P 500 »)
+templates.env.filters["algo_tag"] = visual_tags.algo_tag      # VI21 : une couleur fixe par famille de modèle
+templates.env.filters["iclass"] = visual_tags.iclass          # VI22 : badge de classe d'actifs devant un nom
 templates.env.filters["iname_tip"] = instruments.display_with_tip
 templates.env.filters["iname_h"] = instruments.display_html
 templates.env.filters["iname_h"] = instruments.display_html
@@ -2728,9 +2737,37 @@ def asset_stats_api(
         conn = trackdb.connect()
         try:
             stats["events"] = asset_events.events(conn, symbol)
+            from patrick.tracking import (
+                chart_notes,  # VI24 : notes libres datées, repères de la courbe
+            )
+            stats["events"] = stats["events"] + chart_notes.as_events(chart_notes.list_notes(conn, symbol))
         finally:
             conn.close()
+        stats["cone"] = _forecast_cone(series)                # VI1 : fourchette probable des prochaines séances
     return stats
+
+
+def _forecast_cone(series: dict) -> dict | None:
+    """Volatilité journalière qui dessine le cône de prévision (VI1 du 26/11) : HAR du lendemain (`fund/vol_forecast.har_sigma`), sinon
+    l'écart-type des 60 dernières séances. Le cône dit la fourchette probable du cours, jamais une direction."""
+    import pandas as pd
+
+    from patrick.fund import vol_forecast
+    closes, dates = series.get("closes") or [], series.get("dates") or []
+    if len(closes) < 80 or len(closes) != len(dates):
+        return None
+    df = pd.DataFrame({"close": closes}, index=pd.to_datetime(dates))
+    for key, col in (("opens", "open"), ("highs", "high"), ("lows", "low")):
+        if series.get(key) and len(series[key]) == len(df):
+            df[col] = pd.to_numeric(pd.Series(series[key], index=df.index), errors="coerce")
+    try:
+        forecast = vol_forecast.har_sigma(df)
+    except (ValueError, ArithmeticError, KeyError):
+        forecast = None
+    if forecast and forecast.get("sigma"):
+        return {"sigma": float(forecast["sigma"]), "basis": "har"}
+    rets = df["close"].pct_change().dropna().tail(60)
+    return {"sigma": float(rets.std()), "basis": "trailing"} if len(rets) >= 30 else None
 
 
 @app.get("/targets/{ticker}")

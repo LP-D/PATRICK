@@ -9,7 +9,7 @@
   {% for r in reigns | reverse %}
   <li class="ch-reign{{ ' is-current' if r.current else '' }}">
     <span class="ch-bar" style="--w: {{ (100 * (r.days or 0) / longest) | round(1) }}%" aria-hidden="true"></span>
-    <span class="ch-text"><a href="/runs/{{ r.run_id | urlencode }}/analyse" class="pk-mono">{{ r.algo or r.run_id }}</a>
+    <span class="ch-text"><a href="/runs/{{ r.run_id | urlencode }}/analyse" class="pk-mono">{{ (r.algo | algo_tag) if r.algo else r.run_id }}</a>
       · {{ r.start or '?' }} → {{ r.end if r.end else t('ch_current') }}{% if r.days is not none %} · {{ t('ch_days', n=r.days) }}{% endif %}
       {% if r.lost_by %}<span class="hint"> · {{ t('ch_lost_by') }} {{ r.lost_by }}</span>{% endif %}</span>
   </li>

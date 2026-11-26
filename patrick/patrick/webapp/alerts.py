@@ -13,6 +13,7 @@ qu'un trou du fournisseur reste visible dans l'interface.
 from __future__ import annotations
 
 import datetime as dt
+import math
 import threading
 import time
 
@@ -47,6 +48,21 @@ MOVER_INDEX_SYMBOLS = frozenset({
     "^FCHI", "^GDAXI", "^FTSE", "^STOXX50E",                     # Europe : CAC 40, DAX, FTSE 100, Euro Stoxx 50
     "^N225", "^HSI", "000001.SS",                                # Asie : Nikkei 225, Hang Seng, Shanghai Composite
 })
+
+
+# VI14 (26/11) : régions de la carte des marchés (page Indices), dans l'ordre des fuseaux : l'Asie ouvre la journée.
+WORLD_REGIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("asia", ("^N225", "^HSI", "000001.SS")),
+    ("europe", ("^STOXX50E", "^GDAXI", "^FCHI", "^FTSE")),
+    ("americas", ("^GSPC", "^DJI", "^NDX", "^IXIC", "^RUT")),
+)
+
+
+def world_map() -> list[dict]:
+    """Tuiles de la carte des marchés : `[{region, tiles: [{symbol, label, d1, d5}]}]` (vide tant que le bandeau n'a rien calculé)."""
+    world = get_cached().get("world") or {}
+    return [{"region": key, "tiles": [{"symbol": s, **world[s]} for s in symbols if s in world]}
+            for key, symbols in WORLD_REGIONS if any(s in world for s in symbols)]
 
 
 def is_mover_symbol(symbol: str, group: str | None = None) -> bool:
@@ -111,7 +127,8 @@ def _compute_once() -> None:
     # yet closed): it is dropped BEFORE the forward-fill (which would
     # otherwise copy the previous row into it and shorten the lookback), then
     # one-off gaps (local holidays differing by exchange) are filled.
-    df = df.dropna(axis=0, how="all").ffill().dropna(axis=1, how="all")
+    raw = df.dropna(axis=0, how="all")                 # VI14 : variation de chaque place sur SES séances (pas de 0 % recopié)
+    df = raw.ffill().dropna(axis=1, how="all")
     if len(df) < 2:
         with _lock:
             _cache["error"] = "Pas assez de données téléchargées."
@@ -130,7 +147,22 @@ def _compute_once() -> None:
             out.append({"symbol": sym, "label": _label_for(sym), "pct": round(float(val), 2)})
         return out
 
+    world = {}
+    for clean in raw.columns:
+        sym = reverse.get(clean, clean)
+        if sym not in MOVER_INDEX_SYMBOLS:
+            continue
+        s = raw[clean].dropna()
+        s = s[s > 0]
+        if len(s) < 2:
+            continue
+        d1 = (s.iloc[-1] / s.iloc[-2] - 1) * 100            # dernière séance de CETTE place (une place fermée garde sa veille)
+        d5 = (s.iloc[-1] / s.iloc[max(0, len(s) - 1 - LOOKBACK_DAYS)] - 1) * 100
+        world[sym] = {"label": _label_for(sym), "asof": str(s.index[-1])[:10],
+                      "d1": None if math.isnan(float(d1)) else round(float(d1), 2),
+                      "d5": None if math.isnan(float(d5)) else round(float(d5), 2)}
     with _lock:
+        _cache["world"] = world                             # VI14 (26/11) : carte des marchés de la page Indices
         _cache["gainers"] = _rows(ranked.head(TOP_N))
         _cache["losers"] = _rows(ranked.tail(TOP_N)[::-1])
         _cache["updated_at"] = local_now().strftime("%Y-%m-%d %H:%M")

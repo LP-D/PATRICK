@@ -577,6 +577,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Not enough history to compute these stats yet.",
     },
     "assetpanel_load_error": {"fr": "Erreur de chargement.", "en": "Loading error."},
+    "cone_95": {"fr": "Fourchette à 95 %", "en": "95 % range"},
+    "cone_68": {"fr": "Fourchette à 68 %", "en": "68 % range"},
+    "notes_title": {"fr": "Notes sur la courbe", "en": "Notes on the chart"},
+    "notes_day": {"fr": "Date", "en": "Date"},
+    "notes_text": {"fr": "Note", "en": "Note"},
+    "notes_placeholder": {"fr": "ex. annonce de la BCE", "en": "e.g. ECB announcement"},
+    "notes_add": {"fr": "Ajouter", "en": "Add"},
+    "notes_delete": {"fr": "Supprimer", "en": "Delete"},
     "assetpanel_returns": {"fr": "Rendements (horizons du pipeline)", "en": "Returns (pipeline horizons)"},
     "assetpanel_long_window": {"fr": "Vue longue période", "en": "Longer-window view"},
     "assetpanel_zscore": {"fr": "Z-score (60 barres)", "en": "Z-score (60 bars)"},
@@ -862,7 +870,7 @@ def js_strings(lang: str, path: str = "") -> dict[str, str]:
         "recap_horizons", "recap_targets_count",
         # feature/ticker-stats-panel (asset_stats.js)
         "assetpanel_error", "assetpanel_insufficient",
-        "assetpanel_load_error", "assetpanel_returns", "assetpanel_long_window",
+        "assetpanel_load_error", "assetpanel_returns", "assetpanel_long_window", "cone_95", "cone_68", "notes_title", "notes_day", "notes_text", "notes_placeholder", "notes_add", "notes_delete",
         "assetpanel_zscore", "assetpanel_ma", "assetpanel_vol_current", "assetpanel_vol_long_run", # feature/shap-waterfall (shap_waterfall.js)
         "shap_loading", "shap_load_error", "shap_unavailable", "shap_caption", "shap_plain_for", "shap_plain_against",
         "shap_units_hint", "shap_units_hint_probability", "shap_class_0", "shap_class_1", "shap_class_2", "shap_class_3",

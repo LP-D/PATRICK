@@ -11,6 +11,23 @@
     {% endif %}
 </h1>
 <p class="page-subtitle">{{ t('cls_desc_' ~ cls.key) }}</p>
+{# VI14 (26/11) : carte des marchés par région, couleur = variation de la dernière séance (bandeau, rafraîchi toutes les 30 min) #}
+{% if cls.key == 'indices' %}{% set wm = world_map() %}{% if wm %}
+<section class="card world-map" aria-label="{{ t('wm_title') }}">
+  <div class="card-head"><h2>{{ t('wm_title') }}</h2></div>
+  <div class="wm-regions">
+  {% for r in wm %}
+    <div class="wm-region"><h3>{{ t('wm_' ~ r.region) }}</h3>
+      <div class="wm-tiles">{% for tl in r.tiles %}{% set d = tl.d1 or 0 %}
+        <a class="wm-tile {{ 'is-up' if d >= 0 else 'is-down' }}" href="/targets/{{ tl.symbol | urlencode }}" style="--a: {{ [((d | abs) / 2), 1] | min | round(2) }}"
+           title="{{ tl.symbol | iname }} · {{ t('wm_day') }}{% if tl.asof %} {{ tl.asof }}{% endif %} {{ (d / 100) | pct(2, true) }} · 5 j {{ ((tl.d5 or 0) / 100) | pct(2, true) }}">
+          <span class="wm-name">{{ tl.symbol | iname_short }}</span><span class="wm-pct pk-mono">{{ (d / 100) | pct(2, true) }}</span></a>
+      {% endfor %}</div></div>
+  {% endfor %}
+  </div>
+  <p class="hint">{{ t('wm_hint') }}</p>
+</section>
+{% endif %}{% endif %}
 
 {% if cls.key in ('crypto', 'fx', 'rates', 'indices') %}
 <p class="banner banner-info">{{ t('cls_note_' ~ cls.key) }}</p>

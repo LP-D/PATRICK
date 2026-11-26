@@ -25,21 +25,54 @@
         return (v > 0 ? "+" : "") + fmtNum(v, digits);
     }
 
+    /* VI1 (26/11) : cône de prévision : fourchette probable du cours sur les CONE_DAYS prochaines séances, à 68 % (±1 écart) et 95 %
+       (±1,96), d'après la volatilité journalière prévue (HAR, sinon 60 séances). Une fourchette, jamais une direction. */
+    var CONE_DAYS = 20;
+    function coneSeries(xs, closes, cone) {
+        var n = closes.length, last = closes[n - 1], x0 = xs[n - 1];
+        var future = [], d = new Date(x0);
+        while (future.length < CONE_DAYS) {
+            d = new Date(d.getTime() + 86400000);
+            if (d.getUTCDay() !== 0 && d.getUTCDay() !== 6) future.push(d.getTime());
+        }
+        var band = function (z) {
+            return future.map(function (_, k) { return last * Math.exp(z * cone.sigma * Math.sqrt(k + 1)); });
+        };
+        var line = function (z) {
+            var out = closes.map(function () { return null; }).concat(band(z));
+            out[n - 1] = last;                         // la fourchette part du dernier cours
+            return out;
+        };
+        return {
+            xs: xs.concat(future),
+            closes: closes.concat(future.map(function () { return null; })),
+            series: [
+                { name: tr("cone_95", "95 % range"), values: line(1.96), color: "--text-3", width: 1, dash: [2, 3] },
+                { name: tr("cone_68", "68 % range"), values: line(1), color: "--brand", width: 1, dash: [4, 3] },
+                { name: "", values: line(-1), color: "--brand", width: 1, dash: [4, 3] },
+                { name: "", values: line(-1.96), color: "--text-3", width: 1, dash: [2, 3] },
+            ],
+        };
+    }
+
     function drawChart(host, symbol, data) {
         var P = window.PatrickPlot, dates = data.dates || [], closes = data.closes || [];
         var xs = dates.map(P.parseDate), timed = xs.length === closes.length && xs.every(function (x) { return isFinite(x); });
         if (!timed) xs = closes.map(function (_, i) { return i; });
         var ohlc = timed && data.opens && data.opens.length === closes.length ? { open: data.opens, high: data.highs, low: data.lows } : null;
+        var cone = timed && data.cone && data.cone.sigma > 0 && closes.length > 1 ? coneSeries(xs, closes, data.cone) : null;
+        var mainSeries = closes.length < 2 ? [] : [{ values: cone ? cone.closes : closes, color: "--brand", width: 1.8 }];
         P.create(host, {
-            type: "line", xKind: timed ? "time" : "index", xs: xs, xLabel: function (i) { return dates[i] || String(i); },
-            series: closes.length < 2 ? [] : [{ values: closes, color: "--brand", width: 1.8 }],
+            type: "line", xKind: timed ? "time" : "index", xs: cone ? cone.xs : xs, xLabel: function (i) { return dates[i] || String(i); },
+            series: cone ? mainSeries.concat(cone.series) : mainSeries,
             title: (window.PatrickNames ? window.PatrickNames.label(symbol) : symbol), quoteTitle: false, initialDays: 365,
             quote: timed, trend: true, ranges: timed, height: 220, empty: tr("preview_no_data", "No data for this period."),
-            ohlc: ohlc, volume: ohlc && data.volumes && data.volumes.some(function (v) { return v > 0; }) ? data.volumes : null,
+            ohlc: cone ? null : ohlc, volume: !cone && ohlc && data.volumes && data.volumes.some(function (v) { return v > 0; }) ? data.volumes : null,
             // D3 : changements de champion (« C1 » = horizon 1 jour) et publications de résultats (« R »), repères verticaux datés ;
             // A17 : calendrier économique (« IPC », « Emploi », « Fed », « BCE »...) en pointillé plus discret
             vlines: timed ? (data.events || []).map(function (e) {
                 if (e.kind === "macro") return { x: P.parseDate(e.date), label: e.label, color: "--info", dash: [1, 4], minor: true };
+                if (e.kind === "note") return { x: P.parseDate(e.date), label: e.label, color: "--text-2", dash: [1, 2] };   // VI24
                 return { x: P.parseDate(e.date), label: e.label, color: e.kind === "earnings" ? "--warn" : "--brand", dash: [2, 3] };
             }).filter(function (l) { return isFinite(l.x); }) : [],
         });
@@ -116,14 +149,74 @@
 
         var host = body.querySelector(".asset-chart");
         if (host) drawChart(host, symbol, data);
+        if (host && panel.getAttribute("data-events")) renderNotes(panel, symbol, data);
     }
 
-    function loadPanel(panel) {
+    /* VI24 (26/11) : notes libres datées sous la courbe d'un actif (ajout, liste, suppression) ; repères « ✎ » sur le graphique. */
+    function noteButton(label) {
+        var b = document.createElement("button");
+        b.type = "button"; b.className = "btn-ghost"; b.textContent = label;
+        return b;
+    }
+    function renderNotes(panel, symbol, data) {
+        var body = panel.querySelector(".asset-panel-body");
+        if (!body || body.querySelector(".chart-notes")) return;
+        var notes = (data.events || []).filter(function (e) { return e.kind === "note"; });
+        var box = document.createElement("details");
+        box.className = "chart-notes";
+        var summary = document.createElement("summary");
+        summary.textContent = tr("notes_title", "Notes on the chart") + " (" + notes.length + ")";
+        box.appendChild(summary);
+        var form = document.createElement("form");
+        form.className = "chart-notes-form inline-form";
+        var day = document.createElement("input");
+        day.type = "date"; day.name = "day"; day.setAttribute("aria-label", tr("notes_day", "Date"));
+        day.value = (data.dates || []).length ? String(data.dates[data.dates.length - 1]).slice(0, 10) : "";
+        var text = document.createElement("input");
+        text.type = "text"; text.name = "text"; text.maxLength = 120;
+        text.setAttribute("aria-label", tr("notes_text", "Note")); text.placeholder = tr("notes_placeholder", "e.g. ECB announcement");
+        var add = document.createElement("button");
+        add.type = "submit"; add.className = "btn-secondary"; add.textContent = tr("notes_add", "Add");
+        form.appendChild(day); form.appendChild(text); form.appendChild(add);
+        box.appendChild(form);
+        var list = document.createElement("ul");
+        list.className = "ch-list";
+        notes.forEach(function (n) {
+            var li = document.createElement("li");
+            li.textContent = n.date + " · " + n.text + " ";
+            var del = noteButton(tr("notes_delete", "Delete"));
+            del.addEventListener("click", function () {
+                fetch("/api/chart-notes/" + encodeURIComponent(symbol) + "/" + n.note_id, { method: "DELETE", credentials: "same-origin" })
+                    .then(function () { reloadPanel(panel); });
+            });
+            li.appendChild(del);
+            list.appendChild(li);
+        });
+        box.appendChild(list);
+        form.addEventListener("submit", function (ev) {
+            ev.preventDefault();
+            fetch("/api/chart-notes/" + encodeURIComponent(symbol), {
+                method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ day: day.value, text: text.value }),
+            }).then(function (r) { if (r.ok) reloadPanel(panel, true); });
+        });
+        body.appendChild(box);
+    }
+    function reloadPanel(panel, open) {
+        var wasOpen = open || !!(panel.querySelector(".chart-notes") || {}).open;
+        loadPanel(panel, wasOpen);
+    }
+
+    function loadPanel(panel, notesOpen) {
         var symbol = panel.getAttribute("data-symbol");
         if (!symbol) return;
         fetch("/api/asset-stats/" + encodeURIComponent(symbol) + (panel.getAttribute("data-events") ? "?events=1" : ""))
             .then(function (r) { return r.json(); })
-            .then(function (data) { renderPanel(panel, data); })
+            .then(function (data) {
+                renderPanel(panel, data);
+                var box = panel.querySelector(".chart-notes");
+                if (box && notesOpen) box.open = true;
+            })
             .catch(function () {
                 var body = panel.querySelector(".asset-panel-body");
                 if (body) {

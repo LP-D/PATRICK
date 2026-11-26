@@ -52,7 +52,7 @@
   <p class="hint">{{ t('lb_h_gap') }}</p>
   {% set ns = namespace(out=[]) %}
   {% for r in board.gaps %}
-    {% set ns.out = ns.out + [[r.target | iname ~ ' · ' ~ t('lb_horizon_days', h=r.horizon), r.algo, r.n, pct(r.live_rate), pct(r.holdout_rate),
+    {% set ns.out = ns.out + [[r.target | iname ~ ' · ' ~ t('lb_horizon_days', h=r.horizon), r.algo | algo_tag, r.n, pct(r.live_rate), pct(r.holdout_rate),
                                pts(r.gap) ~ (' *' if r.significant else '')]] %}
   {% endfor %}
   {{ data_table([t('lb_c_model'), t('lb_c_algo'), t('lb_c_n'), t('lb_c_live'), t('lb_c_holdout'), t('lb_c_gap')], ns.out,

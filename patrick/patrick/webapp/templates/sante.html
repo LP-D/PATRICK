@@ -1,5 +1,5 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import status_badge %}
+{% from "_components.html" import status_badge, lazy_block %}
 {% block title %}PATRICK — {{ t('hl_title') }}{% endblock %}
 
 {# Santé de la plateforme (`tracking/health.py`) et rapports hebdomadaires (`tracking/weekly_report.py`). Rendu serveur. #}
@@ -57,6 +57,9 @@
   </div>
   <p class="hint">{{ t('hl_night_hint') }}</p>
   {% endif %}
+  {# VI10 (26/11) : frise des 30 dernières nuits, une ligne par nuit, une barre par étape (system/night_history.py) #}
+  <h3>{{ t('hl_nights_title') }}</h3>
+  {{ lazy_block('/fragments/night-history', 4, t('sb_loading'), t('lazy_retry')) }}
 </section>
 
 <section class="card">

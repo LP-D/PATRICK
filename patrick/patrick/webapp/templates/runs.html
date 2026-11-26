@@ -210,7 +210,7 @@
         <tr class="history-row" data-run-id="{{ r.run_id }}" tabindex="0">
             <td class="hc-check">{% if r.status == 'done' %}<input type="checkbox" class="compare-run-checkbox" form="compare-rl-form" name="run_ids" value="{{ r.run_id }}" aria-label="{{ t('rn_select_aria', r=r.run_id) }}">{% endif %}</td>
             <td class="hc-name" title="{{ r.run_id }}">{{ r.name or r.run_id }}</td>
-            <td title="{{ r.target }}">{{ (r.target | iname) if r.target else '—' }}</td>
+            <td title="{{ r.target }}">{% if r.target %}{{ r.target | iclass }}{{ r.target | iname }}{% else %}—{% endif %}</td>
             <td>{{ r.algo or '—' }}</td>
             <td class="pk-mono">{{ t('rlh_engine_n', n=r.engine) if r.engine else '—' }}</td>
             {# Un run terminé montre son verdict (`rl.reading`) ; les autres, leur état (en file, en cours, échoué...). #}
@@ -263,7 +263,7 @@
             <td class="hc-check">{% if not locked %}<input type="checkbox" class="compare-run-checkbox" form="compare-runs-form" name="run_ids" value="{{ r.run_id }}" aria-label="{{ t('rn_select_aria', r=r.run_id) }}">{% endif %}</td>
             <td class="hc-name" title="{{ r.run_id }}">{{ (r.name or r.run_id) | safe }}{% if r.partial %} <span class="tag tag-partial" title="{{ t('hist_partial_tip') }}">{{ t('hist_partial_tag') }}</span>{% endif %}{% if r.suspect %} <span class="tag tag-suspect" title="{{ t('suspect_banner_body', reason=r.suspect) }}">{{ t('suspect_tag') }}</span>{% endif %}</td>
             <td><span class="kind-badge kind-{{ r.kind }}">{{ t('kind_alpha') if r.kind == 'alpha' else t('kind_value') if r.kind == 'value' else t('kind_directional') }}</span></td>
-            <td title="{{ r.target }}">{{ r.target | iname }}</td>
+            <td title="{{ r.target }}">{{ r.target | iclass }}{{ r.target | iname }}</td>
             <td>{{ r.horizon | hlabel }}</td>
             <td>{{ status_badge(shown_status, state) }}</td>
             {{ panel_td(r.panel, 'headline') }}

@@ -1,0 +1,17 @@
+{# VI4 (26/11, webapp/fund_visuals.correlation) : corrélation des positions ouvertes, blocs regroupés ; rouge = bougent ensemble. #}
+{% if not corr %}
+<p class="hint">{{ t('fund_corr_none') }}</p>
+{% else %}
+<div class="table-scroll">
+<table class="corr-grid">
+  <thead><tr><th></th>{% for s in corr.symbols %}<th scope="col" title="{{ s | iname }}">{{ s }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for row in corr.matrix %}{% set i = loop.index0 %}
+  <tr><th scope="row" title="{{ corr.symbols[i] | iname }}">{{ corr.symbols[i] }}</th>
+    {% for v in row %}<td class="corr-cell {{ 'corr-pos' if v >= 0 else 'corr-neg' }}" style="--a: {{ (v | abs) | round(2) }}" title="{{ corr.symbols[i] }} / {{ corr.symbols[loop.index0] }} : {{ '%.2f' | format(v) }}">{{ '%.2f' | format(v) }}</td>{% endfor %}</tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="hint">{{ t('fund_corr_hint', n=corr.n) }}</p>
+{% endif %}

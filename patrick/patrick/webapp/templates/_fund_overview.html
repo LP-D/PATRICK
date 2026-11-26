@@ -127,6 +127,29 @@
     </ul>
   </section>
 
+  {# VI6 (26/11) : nuage risque / rendement des stratégies de la catégorie (rayon ~ racine de la valeur) #}
+  {% set cat_strats = [] %}{% for g in c.groups %}{% set _ = cat_strats.extend(g.strategies) %}{% endfor %}
+  {% set sc = fund_scatter(cat_strats) %}
+  {% if sc %}
+  <section class="card" aria-labelledby="fund-scatter-title-{{ c.category }}">
+    <div class="card-head"><h3 id="fund-scatter-title-{{ c.category }}">{{ t('fund_scatter_title') }}</h3></div>
+    <svg class="fund-scatter" viewBox="0 0 {{ sc.width }} {{ sc.height }}" role="img" aria-label="{{ t('fund_scatter_title') }}">
+      <line class="sc-axis" x1="{{ sc.pad }}" y1="{{ sc.zero_y }}" x2="{{ sc.width - sc.pad }}" y2="{{ sc.zero_y }}"></line>
+      <line class="sc-axis" x1="{{ sc.pad }}" y1="{{ sc.pad }}" x2="{{ sc.pad }}" y2="{{ sc.height - sc.pad }}"></line>
+      <text class="sc-label" x="{{ sc.width - sc.pad }}" y="{{ sc.height - 8 }}" text-anchor="end">{{ t('fund_scatter_x') }} →</text>
+      <text class="sc-label" x="6" y="{{ sc.pad - 12 }}">↑ {{ t('fund_scatter_y') }}</text>
+      {% for tk in sc.xticks %}<text class="sc-tick" x="{{ tk.x }}" y="{{ sc.height - sc.pad + 14 }}" text-anchor="middle">{{ tk.v | pct(0) }}</text>{% endfor %}
+      {% for tk in sc.yticks %}<text class="sc-tick" x="{{ sc.pad - 6 }}" y="{{ tk.y + 4 }}" text-anchor="end">{{ tk.v | pct(1, true) }}</text>{% endfor %}
+      {% for d in sc.dots %}
+      <g class="sc-dot sc-{{ d.tone }}"><title>{{ d.name }} · {{ t('fund_scatter_x') }} {{ d.vol | pct(1) }} · {{ t('fund_scatter_y') }} {{ d.ret | pct(1, true) }} · {{ d.nav | eur }}</title>
+        <circle cx="{{ d.cx }}" cy="{{ d.cy }}" r="{{ d.r }}"></circle>
+        <text class="sc-name" x="{{ (d.cx - d.r - 4) if d.label_left else (d.cx + d.r + 4) }}" y="{{ d.cy + 4 }}" text-anchor="{{ 'end' if d.label_left else 'start' }}">{{ d.label }}</text></g>
+      {% endfor %}
+    </svg>
+    <p class="hint">{{ t('fund_scatter_hint') }}</p>
+  </section>
+  {% endif %}
+
   <section class="card" aria-labelledby="fund-table-title-{{ c.category }}">
     <div class="card-head"><h3 id="fund-table-title-{{ c.category }}">{{ t('fund_strategies_title') }}</h3></div>
     {% for g in c.groups %}

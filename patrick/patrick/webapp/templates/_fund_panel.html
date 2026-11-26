@@ -87,6 +87,26 @@
 <script id="fund-chart-data" type="application/json">{{ {"series": snap.series, "capital": k.capital, "labels": {"nav": t('fund_chart_nav'), "gross": t('fund_chart_gross'), "capital": t('fund_chart_capital'), "drawdown": t('fund_chart_drawdown'), "rebased": t('fund_chart_rebased')}} | tojson }}</script>
 
 <h3>{{ t('fund_pos_title') }} <span class="hint">({{ open_positions | length }})</span></h3>
+{# VI2 (26/11) : treemap des positions ouvertes : surface = exposition, couleur = sens du P&L, intensité = son ampleur #}
+{% set tiles = fund_tiles(snap.positions, k.nav) %}
+{% if tiles %}
+<div class="fund-treemap" role="img" aria-label="{{ t('fund_tree_title') }}">
+  {% for tl in tiles %}
+  <div class="tm-tile tm-{{ tl.tone }}" style="left: {{ tl.left }}%; top: {{ tl.top }}%; width: {{ tl.wpc }}%; height: {{ tl.hpc }}%; --a: {{ tl.alpha }}"
+       title="{{ tl.symbol | iname }} · {{ tl.side }} · {{ t('fund_tree_weight') }} {{ tl.weight | pct(1) }} · P&amp;L {{ tl.pnl | eur }}{% if tl.pnl_pct is not none %} ({{ tl.pnl_pct | pct(1, true) }}){% endif %}">
+    {% if tl.w > 54 and tl.h > 22 %}<span>{{ tl.symbol }}</span>{% if tl.h > 40 and tl.pnl_pct is not none %}<small class="pk-mono">{{ tl.pnl_pct | pct(1, true) }}</small>{% endif %}{% endif %}
+  </div>
+  {% endfor %}
+</div>
+<p class="hint">{{ t('fund_tree_hint') }}</p>
+{% endif %}
+{# VI4 (26/11) : corrélation des positions ouvertes, chargée à l'ouverture (fonds.js) #}
+{% if open_positions | length >= 2 %}
+<details class="fund-corr" data-corr-url="/fragments/fund-correlation/{{ snap.strategy.strategy_id | urlencode }}">
+  <summary>{{ t('fund_corr_title') }}</summary>
+  <div class="fund-corr-body"><p class="hint">{{ t('sb_loading') }}</p></div>
+</details>
+{% endif %}
 {% if open_positions %}
 <div class="table-scroll">
   <table class="data-table fund-positions">
