@@ -212,6 +212,7 @@ def _duel_one(st, horizon: int, best_h: dict, trial_id: int, known_eval: dict | 
         "criterion": verdict["criterion"],
         "reason": verdict["reason"],
         "brier_tolerance": metric_panel.BRIER_TOLERANCE,
+        **({"r2_tolerance": metric_panel.R2_TOLERANCE} if verdict["criterion"] == metric_panel.CRITERION_IC_R2 else {}),
         "challenger_score": chal_score,
         "champion_score": champ_score,
         "holdout_start": str(st.all_dates_full[st.n_wf].date()),

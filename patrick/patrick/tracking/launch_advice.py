@@ -13,7 +13,8 @@ import sqlite3
 import statistics
 
 # du plus léger au plus approfondi : à temps égal, on préfère le plus approfondi
-DEPTH = ("quick", "short_history", "recent", "standard", "regimes", "robust", "ensemble", "deep")
+# (profils de direction seulement : un profil de valeur exacte prépare un autre objectif, il n'est jamais proposé à sa place)
+DEPTH = ("quick", "short_history", "recent", "standard", "regimes", "robust", "ensemble", "deep", "max")
 MIN_RUNS = 3
 
 
@@ -55,5 +56,5 @@ def advise(conn: sqlite3.Connection, minutes: float, target: str | None = None) 
         by, scope = durations(conn), None
     profiles = [{"key": k, "median_min": round(statistics.median(v), 1), "n": len(v)} for k, v in by.items() if len(v) >= MIN_RUNS]
     profiles.sort(key=lambda p: DEPTH.index(p["key"]) if p["key"] in DEPTH else len(DEPTH))
-    fitting = [p for p in profiles if p["median_min"] <= minutes]
+    fitting = [p for p in profiles if p["key"] in DEPTH and p["median_min"] <= minutes]   # jamais un profil hors échelle (valeur exacte, thématique)
     return {"profiles": profiles, "recommended": fitting[-1]["key"] if fitting else None, "scope": scope, "minutes": minutes}

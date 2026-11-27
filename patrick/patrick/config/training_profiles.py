@@ -6,7 +6,13 @@ configuration par défaut, il préremplit le formulaire, que l'utilisateur relit
 formulaire sait représenter -- sinon le réglage serait perdu à la soumission. Les profils enregistrés par l'utilisateur
 (navigateur) restent à part ; ceux-ci sont fournis avec l'application.
 
-`cost` : durée relative d'un run typique de 10 ans+ d'historique (low ≈ 5-10 min, medium ≈ 20-40 min, high ≈ 1-3 h).
+`cost` : durée relative d'un run typique de 10 ans+ d'historique (low ≈ 5-10 min, medium ≈ 20-40 min, high ≈ 1-3 h, max ≈ une nuit ou
+plus par cible : la recherche la plus large que le pipeline sait faire, à réserver à une cible et à peu d'horizons).
+
+`task` : l'objectif du modèle (ADR 0029, 0032). `direction` (les classes de mouvement, défaut) ou `value` (le rendement lui-même, régression,
+catégorie de champions à part) ; un profil de valeur exacte porte `task: value` dans son patch, un profil de direction ne la touche pas (la page
+repart de la configuration par défaut, en direction). Ce que la valeur exacte refuse (empilement, CPCV, sur-échantillonnage) n'apparaît dans
+aucun de ses profils.
 """
 from __future__ import annotations
 
@@ -19,13 +25,30 @@ from patrick.core.clock import utc_today
 ALL_ALGOS = list(D.ALL_ML_ALGOS)
 
 
+COSTS = ("low", "medium", "high", "max")
+TASKS = ("direction", "value")
+
+
 @dataclass(frozen=True)
 class TrainingProfile:
     key: str
-    cost: str                                  # "low" | "medium" | "high"
+    cost: str                                  # "low" | "medium" | "high" | "max"
     patch: dict = field(default_factory=dict)  # clés de `to_view`
     needs: str | None = None                   # contrainte d'usage : "equity" (cible action), "any"
     icon: str = "layers"
+    task: str = "direction"                    # objectif du modèle que le profil prépare (voir le module)
+
+    @property
+    def warnings(self) -> list[str]:
+        """Clés i18n des avertissements à montrer quand le profil est appliqué (bandeau de la page de lancement)."""
+        out = []
+        if self.needs == "equity":
+            out.append("prof_warn_equity")
+        if self.task == "value":
+            out.append("prof_warn_value")
+        if self.cost == "max":
+            out.append("prof_warn_max")
+        return out
 
     def resolved_patch(self, today: date | None = None) -> dict:
         """Le patch avec ses valeurs calculées (dates relatives à aujourd'hui)."""
@@ -40,6 +63,21 @@ def _years_ago(years: int):
     return lambda today: (today - timedelta(days=int(365.25 * years))).isoformat()
 
 
+# Profil « max » (2026-11-27) : la configuration la plus large que le formulaire accepte sans changer ce qui juge le modèle (holdout,
+# historique minimum, régime GLOBAL) : tous les algorithmes, criblage exhaustif d'une grille de 5 à 30 variables, trois sur-échantillonneurs
+# et « aucun », 8 plis walk-forward purgés avec embargo, 300 essais Optuna sur 3 finalistes par horizon (5 plis de validation), interactions
+# et pré-filtre élargis, empilement de 40 modèles et probabilités calibrées. Plusieurs heures par horizon : une cible, peu d'horizons.
+_MAX_SEARCH = {
+    "algos": ALL_ALGOS, "tuning_enabled": True, "n_trials": 300, "top_k": 3, "cv_splits": 5,
+    "staged_screening": False, "n_features_grid": "5,6,7,8,9,10,12,14,16,18,20,25,30",
+    "n_wf_folds": 8, "purge": True, "embargo_enabled": True, "track_stability": True, "uniqueness_weights": True,
+    "interact_top_base": 60, "interact_top_pairs": 30, "interact_final_n": 40, "pool_prefilter": 600,
+}
+# Valeur exacte : mêmes leviers de recherche, sans ce que l'objectif refuse (empilement, sur-échantillonnage, calibration isotone : la
+# distribution des erreurs hors échantillon en tient lieu).
+_VALUE = {"task": "value", "value_criterion": "IC", "calibration": False}
+
+
 PROFILES: tuple[TrainingProfile, ...] = (
     TrainingProfile("quick", "low", {
         "tuning_enabled": False, "staged_screening": True, "n_features_grid": "5,6,7,8,9", "algos": ["XGBoost", "LightGBM"],
@@ -48,9 +86,11 @@ PROFILES: tuple[TrainingProfile, ...] = (
     TrainingProfile("deep", "high", {
         "algos": ALL_ALGOS, "n_trials": 200, "top_k": 3, "cv_splits": 4, "stacking": True, "n_wf_folds": 7,
         "n_features_grid": ",".join(str(n) for n in range(5, 21)), "sampler_candidates": ["SMOTE", "BorderlineSMOTE"]}, icon="layers"),
+    # La CPCV refuse la présélection progressive, cochée par défaut dans le formulaire : sans `staged_screening: False`, le profil était
+    # refusé à la soumission (constat du 2026-11-27).
     TrainingProfile("robust", "high", {
         "scheme": "cpcv", "purge": True, "embargo_enabled": True, "holdout_months": 18, "n_features_grid": "5,6,7,8,9,10",
-        "n_trials": 60, "top_k": 1, "track_stability": True}, icon="shield"),
+        "n_trials": 60, "top_k": 1, "track_stability": True, "staged_screening": False}, icon="shield"),
     TrainingProfile("recent", "medium", {
         "start_date": _years_ago(10), "holdout_months": 12, "n_wf_folds": 4, "n_features_grid": "5,6,7,8,9,10,11,12"}, icon="clock"),
     TrainingProfile("short_history", "low", {
@@ -71,6 +111,21 @@ PROFILES: tuple[TrainingProfile, ...] = (
         "families": ["technical", "spike"], "tuning_enabled": False, "staged_screening": True}, icon="activity"),
     TrainingProfile("macro_vol", "medium", {"families": ["macro", "vol_models", "technical"]}, icon="globe"),
     TrainingProfile("seed_check", "medium", {"seed": 7}, icon="refresh-cw"),
+    TrainingProfile("max", "max", {
+        **_MAX_SEARCH, "sampler_candidates": ["SMOTE", "BorderlineSMOTE", "SMOTETomek", "none"], "calibration": True,
+        "stacking": True, "stacking_n_models": 40}, icon="zap"),
+    # --- Valeur exacte (régression du rendement, ADR 0029 / 0032). Sur les 84 premiers champions (27/11, tous des MLP sans réglage à 8
+    # variables), l'IC médiane du holdout passe de -0,005 à 1 jour à +0,12 à 5 et 7 jours : les profils de valeur visent d'abord ces horizons.
+    TrainingProfile("value_quick", "low", {
+        **_VALUE, "tuning_enabled": False, "staged_screening": True, "n_features_grid": "5,6,7,8,9", "algos": ["LightGBM", "XGBoost"],
+        "n_wf_folds": 3, "top_k": 1}, icon="zap", task="value"),
+    TrainingProfile("value_standard", "medium", {**_VALUE}, icon="layers", task="value"),
+    TrainingProfile("value_swing", "medium", {**_VALUE, "horizons": [5, 7, 10, 20]}, icon="calendar", task="value"),
+    TrainingProfile("value_r2", "medium", {**_VALUE, "value_criterion": "R2_oos"}, icon="target", task="value"),
+    TrainingProfile("value_deep", "high", {
+        **_VALUE, "algos": ALL_ALGOS, "n_trials": 150, "top_k": 3, "cv_splits": 4, "n_wf_folds": 7,
+        "n_features_grid": ",".join(str(n) for n in range(5, 21))}, icon="layers", task="value"),
+    TrainingProfile("value_max", "max", {**_MAX_SEARCH, **_VALUE, "sampler_candidates": ["none"], "stacking": False}, icon="zap", task="value"),
 )
 
 BY_KEY: dict[str, TrainingProfile] = {p.key: p for p in PROFILES}
@@ -109,9 +164,12 @@ def identify(view: dict, default_view: dict, today: date | None = None) -> str |
     lancement, n'est pas comparée."""
     best: tuple[str, int] | None = None
     touched: set[str] = set()
+    task = view.get("task") or "direction"
     for p in PROFILES:
         patch = {k: v for k, v in p.resolved_patch(today).items() if k != "start_date"}
         touched.update(patch)
+        if p.task != task:                      # un profil de direction ne décrit jamais un run de valeur exacte, et inversement
+            continue
         if patch and all(_norm(view.get(k)) == _norm(v) for k, v in patch.items()) and (best is None or len(patch) > best[1]):
             best = (p.key, len(patch))
     if best is not None:

@@ -911,7 +911,7 @@ def _fit_eval_full(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: n
 
     `value` (objectif « valeur exacte ») : le modèle est un régresseur du rendement à l'horizon (`models/value.py`), ses
     probabilités de classes viennent de ses erreurs hors échantillon ; mêmes sorties, plus les mesures `IC`, `R2_oos`, `MAE`, `RMSE`,
-    `Hit_sign`. Ni rééchantillonnage ni calibration isotone (la distribution des erreurs en tient lieu).
+    `Hit_sign`, `Cov80`, `MAE_skill`, `MZ_slope`, `Gain_sign` (`models/value.py`). Ni rééchantillonnage ni calibration isotone (la distribution des erreurs en tient lieu).
     `predicted_confidence` (probability of the predicted class, one value per
     test row) feeds `prediction.y_proba`; `p_up` (P(slight up) + P(strong
     up), roadmap bloc 3) feeds `prediction.p_up` and the `Brier_up` /
@@ -1041,7 +1041,7 @@ def _fit_eval_value(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: 
     met["Brier_up"] = calibration_lib.brier_score(p_up, y_up)
     met["ECE_up"] = calibration_lib.expected_calibration_error(p_up, y_up)
     met.update(direction_lib.direction_metrics(y_up, p_up))
-    met.update({k: v for k, v in value_lib.value_metrics(value.r_te, r_hat).items() if v is not None})
+    met.update({k: v for k, v in value_lib.value_metrics(value.r_te, r_hat, residuals=model.residuals_).items() if v is not None})
     return met, y_pred, confidence, p_up
 
 

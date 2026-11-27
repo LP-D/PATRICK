@@ -8,6 +8,15 @@ Trois lots, en plus des profils d'entraînement :
 - **runs conseillés** (ML) : pour chaque cible, le meilleur réentraînement proposé par le conseiller
   (`tracking/retrain_advisor.py`), appliqué à la configuration de son dernier run terminé.
 
+Deux objectifs (ADR 0029, 0032) : la direction (classes) et la valeur exacte (rendement prévu, étiquette `symbole__val`, champions à
+part). Chaque lot se compte pour UN objectif : un run de valeur exacte ne « fait » pas la direction de sa cible, et inversement (avant le
+2026-11-27, un job de valeur exacte en file comptait comme la direction de sa cible et un run `X__val` comme une cible inconnue). Les pages
+ML et DL montrent les lots de la direction, puis ceux de la valeur exacte (cartes `data-task="value"`, qui basculent le formulaire) :
+- par classe d'actifs, avec le nombre de cibles jamais modélisées en valeur exacte dans cette famille ;
+- **valeur exacte là où la direction a un signal** : les cibles au signal regroupé le plus fort (`top_signal`) sans modèle de valeur ;
+- **déjà essayées dans l'autre famille** : cibles modélisées en valeur exacte en réseaux mais jamais en arbres (ou l'inverse) ;
+- horizons jamais lancés en valeur exacte.
+
 Un run « fait » = terminé ou en cours (table `run`), ou déjà en file / en cours (table `job`) : un lot n'en double jamais un autre.
 Un run échoué ne compte pas, il peut être relancé. Les cibles à historique trop court (< `min_history_years`) sont écartées, comme
 le formulaire les grise. Rien n'est lancé ici : les lots 1 et 2 pré-remplissent le formulaire, le lot 3 demande une confirmation.
@@ -25,6 +34,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 
 from patrick.config import defaults as D
+from patrick.config.target_label import run_label, split_task
 from patrick.rl.history import DELETED_PHASE, RL_JOB_FILTER
 
 logger = logging.getLogger(__name__)
@@ -39,6 +49,14 @@ def config_family(config: dict) -> str:
     return "dl" if algos and all(a in D.ALL_DL_ALGOS for a in algos) else "ml"
 
 
+TASKS = ("direction", "value")
+
+
+def config_task(config: dict) -> str:
+    """Objectif d'une configuration (`objective.task`) : « value » pour la valeur exacte, « direction » sinon (défaut historique)."""
+    return "value" if (config.get("objective") or {}).get("task") == "value" else "direction"
+
+
 def _loads(raw: str | None) -> dict:
     try:
         value = json.loads(raw or "{}")
@@ -47,18 +65,20 @@ def _loads(raw: str | None) -> dict:
     return value if isinstance(value, dict) else {}
 
 
-def executed_pairs(conn: sqlite3.Connection, family: str) -> dict[str, set[int]]:
-    """`{cible: {horizons}}` des runs de classification déjà faits, en cours ou en attente, pour la famille `ml` ou `dl`."""
+def executed_pairs(conn: sqlite3.Connection, family: str, task: str = "direction") -> dict[str, set[int]]:
+    """`{cible: {horizons}}` des runs déjà faits, en cours ou en attente, pour la famille `ml` ou `dl` et l'objectif `task`
+    (`direction` : classes ; `value` : valeur exacte, run `symbole__val`). La clé est toujours le symbole."""
     out: dict[str, set[int]] = {}
     marks = ",".join("?" for _ in EXECUTED_RUN_STATUSES)
     for target, horizon, raw in conn.execute(
             f"SELECT target, horizon, config_json FROM run WHERE status IN ({marks})", EXECUTED_RUN_STATUSES):
-        if "__alpha_" not in target and config_family(_loads(raw)) == family:
-            out.setdefault(target, set()).add(int(horizon))
+        base, run_task = split_task(target)
+        if "__alpha_" not in base and run_task == task and config_family(_loads(raw)) == family:
+            out.setdefault(base, set()).add(int(horizon))
     marks = ",".join("?" for _ in PENDING_STATUSES)
     for (raw,) in conn.execute(f"SELECT config_json FROM job WHERE status IN ({marks})", PENDING_STATUSES):
         cfg = _loads(raw)
-        if cfg.get("kind") == "rl" or config_family(cfg) != family:
+        if cfg.get("kind") == "rl" or config_family(cfg) != family or config_task(cfg) != task:
             continue
         objective = cfg.get("objective") or {}
         symbol = objective.get("target_symbol")
@@ -116,18 +136,23 @@ def by_asset_class(candidates: Iterable[str], never: Iterable[str], sources: dic
 
 def overview(conn: sqlite3.Connection, family: str, symbols: Iterable[str], first_dates: dict[str, str], today: date,
              min_years: float = D.DEFAULT_MIN_HISTORY_YEARS, horizons: Iterable[int] = D.DEFAULT_HORIZONS,
-             sources: dict[str, str] | None = None, evidence: dict[str, dict] | None = None) -> dict:
-    """`{"never": [cibles], "missing": {cible: [horizons]}}` pour `family` (`ml`, `dl` ou `rl`) ; `symbols` = cibles proposables.
-    Pas d'horizon pour le RL : `missing` y est toujours vide. Avec `sources`, ajoute `"by_class"` (`by_asset_class`)."""
+             sources: dict[str, str] | None = None, evidence: dict[str, dict] | None = None, task: str = "direction") -> dict:
+    """`{"never": [cibles], "missing": {cible: [horizons]}}` pour `family` (`ml`, `dl` ou `rl`) et l'objectif `task` ; `symbols` =
+    cibles proposables. Pas d'horizon pour le RL : `missing` y est toujours vide. Avec `sources`, ajoute `"by_class"` (`by_asset_class`).
+    Valeur exacte (`task="value"`) : ajoute `"cross"`, les cibles déjà modélisées en valeur exacte dans l'AUTRE famille (réseaux / arbres)
+    mais jamais dans celle-ci."""
     candidates = [s for s in dict.fromkeys(symbols) if _long_enough(s, first_dates, today, min_years)]
     if family == "rl":
         done = rl_executed_targets(conn)
         out = {"never": [s for s in candidates if s not in done], "missing": {}}
     else:
-        done_pairs = executed_pairs(conn, family)
+        done_pairs = executed_pairs(conn, family, task)
         wanted = list(horizons)
         missing = {s: gaps for s in candidates if s in done_pairs and (gaps := [h for h in wanted if h not in done_pairs[s]])}
         out = {"never": [s for s in candidates if s not in done_pairs], "missing": missing}
+        if task == "value":
+            other = executed_pairs(conn, "dl" if family == "ml" else "ml", task)
+            out["cross"] = [s for s in out["never"] if s in other]
     if sources is not None:
         out["by_class"] = by_asset_class(candidates, out["never"], sources, evidence)
     return out
@@ -148,13 +173,13 @@ class FormOverride:
         return list(self._lists[name]) if name in self._lists else self._form.getlist(name)
 
 
-def pending_targets(conn: sqlite3.Connection, family: str) -> set[str]:
-    """Cibles déjà en file ou en cours pour la famille `ml`/`dl` (un lot ne les double pas)."""
+def pending_targets(conn: sqlite3.Connection, family: str, task: str = "direction") -> set[str]:
+    """Cibles déjà en file ou en cours pour la famille `ml`/`dl` et l'objectif `task` (un lot ne les double pas)."""
     marks = ",".join("?" for _ in PENDING_STATUSES)
     out: set[str] = set()
     for (raw,) in conn.execute(f"SELECT config_json FROM job WHERE status IN ({marks})", PENDING_STATUSES):
         cfg = _loads(raw)
-        if cfg.get("kind") != "rl" and config_family(cfg) == family:
+        if cfg.get("kind") != "rl" and config_family(cfg) == family and config_task(cfg) == task:
             symbol = (cfg.get("objective") or {}).get("target_symbol")
             if symbol:
                 out.add(symbol)
@@ -335,6 +360,13 @@ def expected_value(score: float, est_minutes: float | None, signal: bool | None)
 TOP_SIGNAL_N = 50
 
 
+def value_where_signal(conn: sqlite3.Connection, candidates: Iterable[str], never_value: Iterable[str], n: int = TOP_SIGNAL_N) -> list[str]:
+    """Lot « valeur exacte là où la direction a un signal » : les cibles les plus prévisibles en direction (`top_signal`, signal regroupé)
+    qui n'ont encore aucun modèle de valeur exacte dans la famille. Prédire l'amplitude n'a de chance que là où la direction se prévoit déjà."""
+    never = set(never_value)
+    return top_signal(conn, [s for s in candidates if s in never], n=n)
+
+
 def top_signal(conn: sqlite3.Connection, candidates: Iterable[str], n: int = TOP_SIGNAL_N) -> list[str]:
     """Les `n` cibles proposables les plus prévisibles d'après l'AUC regroupée (`tracking/pooled_signal.py`) : celles dont une paire est
     significative d'abord, puis par meilleure AUC. C'est le lot d'une campagne ciblée (deep learning, réglage long) : dépenser le calcul
@@ -448,12 +480,15 @@ def _refit(config, suggestion, name: str | None = None):
 
 
 def pending_pairs(conn: sqlite3.Connection) -> dict[str, set[int]]:
-    """`{cible: {horizons}}` des jobs de classification déjà en file ou en cours (ML et DL) : ce qu'un lot ne doit pas doubler."""
+    """`{cible: {horizons}}` des jobs ML et DL déjà en file ou en cours : ce qu'un lot ne doit pas doubler. La clé dit l'objectif : le
+    symbole pour la direction, `symbole__val` pour la valeur exacte (`config.target_label.run_label`) -- un job de valeur exacte en file ne
+    bloque pas la relance de la direction de sa cible."""
     out: dict[str, set[int]] = {}
     marks = ",".join("?" for _ in PENDING_STATUSES)
     for (raw,) in conn.execute(f"SELECT config_json FROM job WHERE status IN ({marks})", PENDING_STATUSES):
         cfg = _loads(raw)
         objective = cfg.get("objective") or {}
         if cfg.get("kind") != "rl" and objective.get("target_symbol"):
-            out.setdefault(objective["target_symbol"], set()).update(int(h) for h in objective.get("horizons") or [])
+            key = run_label(objective["target_symbol"], task=config_task(cfg))
+            out.setdefault(key, set()).update(int(h) for h in objective.get("horizons") or [])
     return out

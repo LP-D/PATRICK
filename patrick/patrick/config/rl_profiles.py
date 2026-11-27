@@ -1,10 +1,12 @@
 """Profils d'entraînement du reinforcement learning (page /rl) : même mécanique que `training_profiles` et `dl_profiles` -- un profil est un
 PATCH sur la vue du formulaire (`webapp/forms_rl.py::to_view_rl`, clés plates `rl_<réglage>`), que l'utilisateur relit avant de lancer.
 
-`cost` : durée relative d'un run (low ≈ 2-5 min, medium ≈ 10-30 min, high ≈ 1 h et plus) sur un processeur sans carte graphique.
+`cost` : durée relative d'un run (low ≈ 2-5 min, medium ≈ 10-30 min, high ≈ 1 h et plus, max ≈ plusieurs heures) sur un processeur sans
+carte graphique.
 """
 from __future__ import annotations
 
+from patrick.config import defaults as D
 from patrick.config.training_profiles import TrainingProfile, apply_patch
 
 __all__ = ["BY_KEY", "PROFILES", "apply_patch", "gallery", "get"]
@@ -34,6 +36,13 @@ PROFILES: tuple[TrainingProfile, ...] = (
         icon="clock"),
     TrainingProfile("rl_prudent", "medium", {"rl_n_folds": 6, "rl_bootstrap_samples": 3000, "rl_retrain": "rolling", "rl_rolling_bars": 1500},
                     icon="eye"),
+    # Le plus large (2026-11-27) : toutes les familles de variables causales, 40 variables, mémoire de 20 jours, réseau 3 x 128, 200 000 pas,
+    # 5 agents moyennés, 8 plis et 5 000 tirages de bootstrap. Les garde-fous du moteur 2 (validation, repli sur l'achat-conservation,
+    # frais doublés à l'entraînement) restent : « max » cherche plus, il ne juge pas plus gentiment.
+    TrainingProfile("rl_max", "max", {
+        "families": list(D.RL_FEATURE_FAMILIES), "rl_max_features": 40, "rl_obs_lookback": 20, "rl_policy_units": 128, "rl_policy_layers": 3,
+        "rl_total_timesteps": 200000, "rl_n_steps": 1024, "rl_batch_size": 128, "rl_n_seeds": 5, "rl_n_folds": 8,
+        "rl_bootstrap_samples": 5000}, icon="zap"),
 )
 
 BY_KEY: dict[str, TrainingProfile] = {p.key: p for p in PROFILES}

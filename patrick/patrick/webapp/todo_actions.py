@@ -19,7 +19,7 @@ import statistics
 from collections.abc import Callable
 
 from patrick.config import defaults as D
-from patrick.config.target_label import split_run_label
+from patrick.config.target_label import run_label, split_run_label
 from patrick.tracking import data_health, retrain_advisor
 from patrick.tracking import db as trackdb
 from patrick.tracking import home as trackhome
@@ -67,7 +67,7 @@ def _resolve(ctx: _Ctx, source: str, patch: dict, *, at: str, detail: str, is_re
         return _item(source, state="blocked", at=at, detail=detail, problem=errors[0])
     obj = config.objective
     fields = {"at": at, "detail": detail, "target": obj.run_label(), "horizons": obj.horizons, "name": config.name, "family": config.family}
-    if obj.horizons and set(obj.horizons) <= ctx.pending.get(obj.target_symbol, set()):
+    if obj.horizons and set(obj.horizons) <= ctx.pending.get(run_label(obj.target_symbol, task=obj.task), set()):
         return _item(source, state="pending", **fields)
     if is_replaced(config):
         return _item(source, state="replaced", **fields)

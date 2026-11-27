@@ -1435,6 +1435,59 @@ def _echo_report(report: dict) -> None:
         typer.echo(f"  refusé {r['target']} h{r['horizon']} {r['signal']} {r['action']} {r['side']} : {' ; '.join(r['reasons'])}")
     for f in report["failed"]:
         typer.echo(f"  échec {f['target']} h{f['horizon']} : {f['reason']}")
+    if report.get("deduplicated"):
+        typer.echo(f"  {len(report['deduplicated'])} règle(s) en double supprimée(s) avec leurs ordres.")
+    if report.get("orphans_closed"):
+        typer.echo(f"  {report['orphans_closed']} position(s) orpheline(s) fermée(s) (règles retirées dont le modèle n'a plus de signal).")
+
+
+@fund_app.command(name="repair")
+def fund_repair_cmd(
+    strategy: str = typer.Option(None, "--strategy", help="Identifiant de la stratégie (str_...)"),
+    all_strategies: bool = typer.Option(False, "--all", help="Toutes les stratégies dont le pilote est activé"),
+    apply: bool = typer.Option(False, "--apply", help="Écrit les corrections (sans : aperçu seul, rien n'est modifié)"),
+    today: str = typer.Option(None, "--today", help="Date AAAA-MM-JJ (défaut : aujourd'hui)"),
+) -> None:
+    """Répare les fonds pilotés : supprime les règles du pilote en double (avec leurs ordres, comptés deux fois) et ferme les positions
+    orphelines des règles retirées dont le modèle n'a plus de signal. Aperçu par défaut ; `--apply` pour écrire."""
+    from patrick.fund import autopilot
+    from patrick.fund import store as fund_store
+
+    if not strategy and not all_strategies:
+        raise typer.BadParameter("--strategy ou --all requis")
+    day = _fund_day(today)
+    conn = trackdb.connect()
+    try:
+        ids = [strategy] if strategy else [s["strategy_id"] for s in fund_store.list_strategies(conn)
+                                           if (fund_store.get_autopilot(conn, s["strategy_id"]) or {}).get("enabled")]
+        totals = {"duplicates": 0, "orders": 0, "orphans": 0, "closed": 0, "pending": 0, "refused": 0}
+        for sid in ids:
+            try:
+                out = autopilot.repair(conn, sid, day, apply=apply)
+            except fund_store.FundError as exc:
+                typer.echo(f"{sid} : refusé ({exc})")
+                continue
+            orders = sum(d["orders"] for d in out["duplicates"])
+            pnl = [d["pnl"] for d in out["duplicates"] if d["pnl"] is not None]
+            doubled = f"{sum(pnl):+,.0f}".replace(",", " ") if pnl else None
+            line = (f"{out['name']} : {len(out['duplicates'])} règle(s) en double ({orders} ordre(s)"
+                    + (f", P&L compté deux fois {doubled} €" if doubled else "") + f"), {len(out['orphans'])} position(s) orpheline(s)")
+            if apply:
+                line += f" : {out['closed']} fermée(s), {out['pending']} en attente, {len(out['refused'])} refusée(s)"
+            typer.echo(line)
+            for r in out["refused"][:5]:
+                typer.echo(f"  refusé {r['target']} h{r['horizon']} {r['requested']} : {' ; '.join(r['reasons'])}")
+            totals["duplicates"] += len(out["duplicates"])
+            totals["orders"] += orders
+            totals["orphans"] += len(out["orphans"])
+            totals["closed"] += out["closed"]
+            totals["pending"] += out["pending"]
+            totals["refused"] += len(out["refused"])
+        verb = "corrigé" if apply else "à corriger (aperçu : relancer avec --apply)"
+        typer.echo(f"Total {verb} : {totals['duplicates']} règle(s) en double ({totals['orders']} ordre(s)), {totals['orphans']} position(s) orpheline(s)"
+                   + (f", {totals['closed']} fermée(s), {totals['pending']} en attente, {totals['refused']} refusée(s)." if apply else "."))
+    finally:
+        conn.close()
 
 
 @fund_app.command(name="autopilot-select")

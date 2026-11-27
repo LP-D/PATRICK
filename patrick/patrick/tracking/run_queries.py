@@ -96,7 +96,8 @@ def batch_best_f1_dir(conn: sqlite3.Connection, run_ids: list[str],
 
 # Le panneau d'un modèle (ADR 0023, `validation/metric_panel.py`), puis l'AUC à 4 classes et le F1 : ces deux-là ne s'affichent plus dans
 # les aperçus mais servent encore à repérer un score impossible (`suspicion.suspect_reason`).
-HEADLINE_METRICS = (*metric_panel.PANEL_KEYS, "AUC_ovr_4cls", "F1_dir", "IC", "R2_oos", "MAE")   # les trois dernières : valeur exacte
+HEADLINE_METRICS = (*metric_panel.PANEL_KEYS, "AUC_ovr_4cls", "F1_dir",
+                    *metric_panel.VALUE_PANEL_KEYS, *metric_panel.VALUE_EXTRA_KEYS)    # la fin : valeur exacte (ADR 0032)
 
 
 def batch_best_metrics(conn: sqlite3.Connection, run_ids: list[str], metrics: tuple[str, ...] = HEADLINE_METRICS,
@@ -275,6 +276,7 @@ def enrich_runs(conn: sqlite3.Connection, index_rows: list[dict], with_balance: 
             # valeur exacte : IC et R² hors échantillon (test, contrôle final), None pour un modèle de direction
             "value_ic": test_m.get("IC"), "holdout_ic": holdout_m.get("IC"), "holdout_r2": holdout_m.get("R2_oos"),
             "panel": metric_panel.panel(test_m), "holdout_panel": metric_panel.panel(holdout_m),
+            "value_panel": metric_panel.value_panel(test_m), "holdout_value_panel": metric_panel.value_panel(holdout_m),
             "holdout_f1_dir": holdout_m.get("F1_dir"),
             "config_json": config_json,
             "best_f1_dir": best_f1_by_run.get(run_id),

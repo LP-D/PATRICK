@@ -79,4 +79,22 @@ DL_STRINGS: dict[str, dict[str, str]] = {
     "prof_dl_long_memory_name": _s("Mémoire longue", "Long memory"),
     "prof_dl_long_memory_desc": _s("GRU et LSTM sur 60 barres, 96 unités : pour les signaux lents (tendances, cycles) qu'une fenêtre courte ne voit pas.",
                                    "GRU and LSTM over 60 bars, 96 units: for slow signals (trends, cycles) a short window cannot see."),
+    # Profils « max » et « valeur exacte » des réseaux (2026-11-27, ADR 0032)
+    "prof_dl_max_name": _s("Max : tous les réseaux", "Max: every network"),
+    "prof_dl_max_desc": _s("Les cinq architectures, 60 essais Optuna sur 3 finalistes, 7 folds, 6 à 20 variables, réseaux de 3 couches sur 60 barres, "
+                           "100 époques, 5 graines moyennées : le plus que la page sait chercher. Une nuit ou plus par cible.",
+                           "All five architectures, 60 Optuna trials over 3 finalists, 7 folds, 6 to 20 variables, 3-layer networks over 60 bars, "
+                           "100 epochs, 5 averaged seeds: the most the page can search. A night or more per target."),
+    "prof_dl_value_quick_name": _s("Valeur exacte, réseau rapide", "Exact value, quick network"),
+    "prof_dl_value_quick_desc": _s("Un MLP léger qui prédit le rendement lui-même, sans Optuna, 8 variables, 3 folds : le cadre des premiers modèles de valeur.",
+                                   "A light MLP that predicts the return itself, no Optuna, 8 variables, 3 folds: the setup of the first value models."),
+    "prof_dl_value_sequence_name": _s("Valeur exacte, séquences", "Exact value, sequences"),
+    "prof_dl_value_sequence_desc": _s("GRU, LSTM et CNN1D en régression sur une fenêtre de 30 barres : l'ordre des jours aide-t-il à prévoir l'amplitude ?",
+                                      "GRU, LSTM and CNN1D as regressors over a 30-bar window: does the order of days help forecast the magnitude?"),
+    "prof_dl_value_swing_name": _s("Valeur exacte, 5 à 20 jours", "Exact value, 5 to 20 days"),
+    "prof_dl_value_swing_desc": _s("MLP et GRU en régression sur les horizons 5, 7, 10 et 20 jours, là où les premiers modèles de valeur ont une IC positive.",
+                                   "MLP and GRU as regressors on the 5, 7, 10 and 20-day horizons, where the first value models have a positive IC."),
+    "prof_dl_value_max_name": _s("Valeur exacte, max (réseaux)", "Exact value, max (networks)"),
+    "prof_dl_value_max_desc": _s("La recherche « max » des réseaux, en régression du rendement. Une nuit ou plus par cible.",
+                                 "The networks' 'max' search, as a return regression. A night or more per target."),
 }

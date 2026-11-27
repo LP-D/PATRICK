@@ -275,10 +275,12 @@ def register(app: FastAPI, templates, context) -> None:
     def _insight(conn, strategy_id: str, snap: dict, today) -> dict:
         """Attribution, témoins et journal des remplacements du panneau. Une lecture en panne (cotation manquante pour un témoin)
         n'empêche jamais le panneau de s'afficher : le bloc concerné est simplement absent."""
-        out = {"attribution": {"by_rule": [], "by_class": [], "by_side": []}, "witnesses": None, "replacements": []}
+        out = {"attribution": {"by_rule": [], "by_class": [], "by_side": []}, "witnesses": None, "replacements": [],
+               "replaced_total": None}
         for key, read in (("attribution", lambda: insight.attribution(conn, strategy_id, snap)),
                           ("witnesses", lambda: insight.witnesses(conn, snap["strategy"], snap, today)),
-                          ("replacements", lambda: insight.replacements(conn, strategy_id))):
+                          ("replacements", lambda: insight.replacements(conn, strategy_id)),
+                          ("replaced_total", lambda: insight.replacement_totals(conn, strategy_id))):
             try:
                 out[key] = read()
             except Exception:

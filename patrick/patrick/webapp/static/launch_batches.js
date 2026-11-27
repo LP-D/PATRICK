@@ -35,19 +35,31 @@
     }
     function reveal(select) { select.scrollIntoView({ behavior: "smooth", block: "center" }); }
 
+    // Objectif que la carte prépare (`data-task` : direction ou valeur exacte, ADR 0032) : le formulaire bascule, et `app.js` affiche ou
+    // masque le critère de la valeur exacte sur cet évènement. Renvoie le texte à ajouter au message quand l'objectif a changé.
+    function applyTask(button) {
+        var wanted = button.dataset.task, task = document.getElementById("task");
+        if (!wanted || !task || task.value === wanted) return "";
+        task.value = wanted;
+        announce(task);
+        return " " + (wanted === "value" ? I18N.batch_js_task_value : I18N.batch_js_task_direction);
+    }
+
     function selectClass(button) {
         var select = targetSelect();
         if (!select) return;
         var n = pick(select, new Set(JSON.parse(button.dataset.symbols)));
         onlyMissing = false;
+        var switched = applyTask(button);
         announce(select);
-        say(n ? fmt(I18N.batch_js_selected, { n: n }) : I18N.batch_js_none);
+        say((n ? fmt(I18N.batch_js_selected, { n: n }) : I18N.batch_js_none) + switched);
         if (n) reveal(select);
     }
 
     function selectMissing(button) {
         var select = targetSelect(), horizons = document.getElementById("horizons");
         if (!select || !horizons) return;
+        var switched = applyTask(button);
         var gaps = JSON.parse(button.dataset.gaps);
         var wantedHorizons = new Set();
         var n = pick(select, new Set(Object.keys(gaps)));
@@ -57,7 +69,7 @@
         announce(select);
         announce(horizons);
         var list = Array.from(wantedHorizons).sort(function (a, b) { return a - b; }).join(", ");
-        say(n ? fmt(I18N.batch_js_selected_missing, { n: n, h: list }) : I18N.batch_js_none);
+        say((n ? fmt(I18N.batch_js_selected_missing, { n: n, h: list }) : I18N.batch_js_none) + switched);
         if (n) reveal(select);
     }
 
@@ -112,7 +124,8 @@
     });
 
     // Un choix fait à la main annule le lot « horizons jamais lancés » : sans cela, le serveur sauterait en silence des couples voulus.
-    ["target_symbols", "horizons"].forEach(function (id) {
+    // Changer l'objectif à la main aussi : les couples manquants de la direction ne sont pas ceux de la valeur exacte.
+    ["target_symbols", "horizons", "task"].forEach(function (id) {
         var el = document.getElementById(id);
         if (el) el.addEventListener("change", function (ev) { if (ev.isTrusted && onlyMissing) { onlyMissing = false; say(""); } });
     });

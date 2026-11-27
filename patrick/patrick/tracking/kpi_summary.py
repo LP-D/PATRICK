@@ -30,7 +30,8 @@ import sqlite3
 
 from patrick.validation import metric_panel
 
-METRICS = (*metric_panel.PANEL_KEYS, "F1_dir", "Acc_dir", "BalAcc_4cls")
+# Valeur exacte (ADR 0032) : son panneau (IC, R² hors échantillon, bon signe, couverture) se lit et classe à la place de celui de la direction.
+METRICS = (*metric_panel.PANEL_KEYS, *metric_panel.VALUE_PANEL_KEYS, "F1_dir", "Acc_dir", "BalAcc_4cls")
 _CHUNK = 400
 _TOP_RANKING_IN_TEXT = 10
 
@@ -97,8 +98,10 @@ def _rank_key(row: dict, by_auc: bool) -> tuple:
 
 
 def _ranked(rows: list[dict]) -> list[dict]:
+    by_ic = any(r.get("IC") is not None for r in rows)
     by_auc = any(r.get("AUC_dir") is not None for r in rows)
-    rows.sort(key=lambda r: _rank_key(r, by_auc) + tuple(str(r.get(k, "")) for k in ("algo", "n_features", "sampler")))
+    key = metric_panel.value_rank_key if by_ic else (lambda r: _rank_key(r, by_auc))
+    rows.sort(key=lambda r: key(r) + tuple(str(r.get(k, "")) for k in ("algo", "n_features", "sampler")))
     for rank, row in enumerate(rows, start=1):
         row["rank"] = rank
     return rows
@@ -125,14 +128,14 @@ def _final_model(conn: sqlite3.Connection, run_id: str) -> dict:
         "ORDER BY trial_id DESC LIMIT 1", (run_id,)).fetchone()
     if row is None:
         return {"final_algo": None, "final_n_features": None, "holdout_F1_dir": None, "holdout_Acc_dir": None,
-                "holdout_panel": metric_panel.panel(None)}
+                "holdout_panel": metric_panel.panel(None), "holdout_value_panel": metric_panel.value_panel(None)}
     marks = ",".join("?" * len(METRICS))
     holdout = dict(conn.execute(
         "SELECT metric, AVG(value) FROM fold_metric WHERE trial_id = ? AND split = 'holdout' "
         f"AND metric IN ({marks}) GROUP BY metric", (row[0], *METRICS)).fetchall())
     return {"final_algo": row[1], "final_n_features": row[2],
             "holdout_F1_dir": holdout.get("F1_dir"), "holdout_Acc_dir": holdout.get("Acc_dir"),
-            "holdout_panel": metric_panel.panel(holdout)}
+            "holdout_panel": metric_panel.panel(holdout), "holdout_value_panel": metric_panel.value_panel(holdout)}
 
 
 def _holdout_diagnostic(conn: sqlite3.Connection, trial_id: int) -> dict:
@@ -144,13 +147,16 @@ def _holdout_diagnostic(conn: sqlite3.Connection, trial_id: int) -> dict:
     scores = dict(conn.execute(
         f"SELECT metric, value FROM holdout_diagnostic WHERE trial_id = ? AND metric IN ({marks})",
         (trial_id, *METRICS)).fetchall())
-    return {"diag_F1_dir": scores.get("F1_dir"), "diag_Acc_dir": scores.get("Acc_dir"), "diag_panel": metric_panel.panel(scores)}
+    return {"diag_F1_dir": scores.get("F1_dir"), "diag_Acc_dir": scores.get("Acc_dir"), "diag_panel": metric_panel.panel(scores),
+            "diag_value_panel": metric_panel.value_panel(scores)}
 
 
 def _rank_metric(conn: sqlite3.Connection, run_ids: list[str]) -> str:
     """Critère qui a classé les candidats de ce lancement (`selection.criterion`, walk-forward) ; `F1_dir` pour un run d'avant le champ."""
     row = conn.execute("SELECT json_extract(config_json, '$.selection.criterion'), json_extract(config_json, '$.validation.scheme') "
                        "FROM run WHERE run_id = ?", (run_ids[0],)).fetchone() if run_ids else None
+    if row and row[0] in ("IC", "R2_oos"):                 # valeur exacte : toujours classée sur son propre critère (walk-forward)
+        return row[0]
     if row and row[0] == "AUC_dir" and row[1] in (None, "walkforward"):
         return "AUC_dir"
     return "F1_dir"
@@ -211,10 +217,14 @@ def summarize(conn: sqlite3.Connection, run_ids: list[str]) -> dict:
             "window_F1_dir": best["score"].get("F1_dir"), "window_Acc_dir": best["score"].get("Acc_dir"),
             "full_F1_dir": full["F1_dir"], "full_Acc_dir": full["Acc_dir"], "full_folds": len(best["folds"]),
             "window_panel": metric_panel.panel(best["score"]), "full_panel": metric_panel.panel(full),
+            "window_value_panel": metric_panel.value_panel(best["score"]), "full_value_panel": metric_panel.value_panel(full),
             **_holdout_diagnostic(conn, best["trial_id"]), **_final_model(conn, run_id)})
+
+    from patrick.config.target_label import is_value_label
 
     return {
         "run_ids": list(runs), "target": target, "horizons": sorted(set(runs.values())),
+        "kind": "value" if target and is_value_label(str(target)) else "directional",
         "n_candidates": len(trials),
         "window": {"mode": "total_window" if total_window else ("first_fold" if extended else "all_folds"),
                    "folds_by_horizon": folds_by_horizon, "note": note},

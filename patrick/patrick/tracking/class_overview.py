@@ -31,8 +31,11 @@ def model_stats_by_asset(conn: sqlite3.Connection, runs: list[dict] | None = Non
         entry = stats.setdefault(asset, {
             "directional": {"n": 0, "n_done": 0, "best": None, "best_run": None, "last": None},
             "alpha": {"n": 0, "n_done": 0, "best": None, "best_run": None, "last": None},
+            "value": {"n": 0, "n_done": 0, "best": None, "best_run": None, "last": None},
             "champions": sorted(champions.get(asset, ())), "suspects": 0})
-        side = entry["alpha" if kind == "alpha" else "directional"]
+        # valeur exacte (`__val`) : sa propre colonne, classée sur son panneau (IC puis R²) ; elle ne se mêle plus à la direction
+        is_value = run.get("kind") == "value" or html.unescape(run["target"] or "").endswith("__val")
+        side = entry["value" if is_value else "alpha" if kind == "alpha" else "directional"]
         side["n"] += 1
         if run["started_at"] and (side["last"] is None or run["started_at"] > side["last"]):
             side["last"] = run["started_at"]
@@ -42,8 +45,9 @@ def model_stats_by_asset(conn: sqlite3.Connection, runs: list[dict] | None = Non
         if run.get("suspect"):
             entry["suspects"] += 1
             continue                      # un score impossible n'est jamais « le meilleur »
-        panel = run.get("panel")
-        if metric_panel.has_any(panel) and (side["best"] is None or metric_panel.rank_key(panel) < metric_panel.rank_key(side["best"])):
+        panel = run.get("value_panel") if is_value else run.get("panel")
+        rank = metric_panel.value_rank_key if is_value else metric_panel.rank_key
+        if metric_panel.has_any(panel) and (side["best"] is None or rank(panel) < rank(side["best"])):
             side["best"], side["best_run"] = panel, run["run_id"]
     return stats
 

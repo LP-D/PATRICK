@@ -1465,6 +1465,8 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
 .adv-cost { display: inline-block; padding: 1px 8px; border-radius: var(--radius-pill); font-size: var(--fs-sm); font-weight: 600; background: var(--surface-3); color: var(--text-2); }
 .adv-cost-low { background: var(--pos-soft); color: var(--pos); }
 .adv-cost-high { background: var(--warn-soft); color: var(--warn); }
+.adv-cost-max { background: var(--neg-soft); color: var(--neg); }
+.profile-group-title { margin: 12px 0 6px; font-size: var(--fs-base); }
 .adv-changes { margin: 8px 0; font-size: var(--fs-base); max-width: 640px; }
 .adv-actions { margin: 8px 0 0; }
 .profile-gallery { margin: 0 0 14px; }
@@ -1492,6 +1494,7 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
 .batch-card.is-empty { border-style: dashed; }                  /* lot vide : estompé par la couleur, pas par l'opacité (le texte garde 4,5:1) */
 .batch-card.is-empty :is(.profile-name, .profile-desc, .batch-count, .profile-meta) { color: var(--text-3); }
 .batch-status { margin: 10px 0 0; }
+.batch-subtitle { font-size: var(--fs-base); margin: 14px 0 6px; }           /* lots de la valeur exacte, sous ceux de la direction */
 .batch-status[hidden] { display: none; }
 
 /* ---- Page Macro : FRED contre ALFRED -------------------------------------------------------------------------- */

@@ -85,6 +85,10 @@
         <tbody>
         <tr><td><span class="kind-badge kind-directional">{{ t('kind_directional') }}</span></td><td class="num pk-mono">{{ home.kinds.directional.n }}</td>{{ panel_td(home.kinds.directional.panel) }}</tr>
         <tr><td><span class="kind-badge kind-alpha">{{ t('kind_alpha') }}</span></td><td class="num pk-mono">{{ home.kinds.alpha.n }}</td>{{ panel_td(home.kinds.alpha.panel) }}</tr>
+        {% if home.kinds.value and home.kinds.value.n %}
+        {# Valeur exacte : le panneau de direction tiré de ses probabilités (mêmes colonnes) ; son propre panneau en info-bulle (ADR 0032). #}
+        <tr><td><span class="kind-badge kind-value" title="{% for key in VALUE_PANEL_KEYS %}{{ t('pm_' ~ key) }} {{ home.kinds.value.value_panel.get(key) | pmfmt(key) }}{% if not loop.last %} · {% endif %}{% endfor %}">{{ t('kind_value') }}</span></td><td class="num pk-mono">{{ home.kinds.value.n }}</td>{{ panel_td(home.kinds.value.panel) }}</tr>
+        {% endif %}
         </tbody>
     </table>
     </div>
