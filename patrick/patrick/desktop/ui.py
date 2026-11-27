@@ -25,7 +25,7 @@ class Reporter:
     def info(self, text: str) -> None: ...
 
     def ask_setup(self) -> dict | None:
-        """Assistant de premier démarrage. Renvoie `{"folder": str | None, "wealth_reference": bool,
+        """Assistant de premier démarrage. Renvoie `{"folder": str | None,
         "schedule": bool}` ou `None` (« Plus tard »)."""
         return None
 
@@ -264,23 +264,16 @@ class SetupWizard:
         self.note = ttk.Label(box, text="", wraplength=540, justify="left", font=("Segoe UI", 9))
         self.note.grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
-        self.reference = tk.BooleanVar(value=True)
         self.schedule = tk.BooleanVar(value=os.name == "nt")
-        self.reference_box = ttk.Checkbutton(
-            box, variable=self.reference, onvalue=True, offvalue=False,
-            text="Ce PC est la référence du patrimoine (comptes)")
-        self.reference_box.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
-        self.reference_hint = ttk.Label(
+        self.wealth_hint = ttk.Label(
             box, wraplength=520, justify="left", font=("Segoe UI", 9), foreground="#6b7280",
-            text="Il publie son patrimoine dans le dossier partagé; les autres PC l'adoptent. "
-                 "Choisis donc un dossier privé.")
-        self.reference_hint.grid(row=3, column=0, columnspan=2, sticky="w", padx=(22, 0))
+            text="Le patrimoine (comptes, mouvements) est fusionné entre les PC : une modification faite sur l'un arrive "
+                 "sur les autres. Choisis donc un dossier privé.")
+        self.wealth_hint.grid(row=3, column=0, columnspan=2, sticky="w", pady=(8, 0))
         self.schedule_box = ttk.Checkbutton(
             box, variable=self.schedule, onvalue=True, offvalue=False,
             text="Publier ce PC automatiquement toutes les heures")
         self.schedule_box.grid(row=4, column=0, columnspan=2, sticky="w", pady=(6, 0))
-        self.reference_touched = False
-        self.reference_box.configure(command=lambda: setattr(self, "reference_touched", True))
 
         ttk.Radiobutton(outer, text="Non, ce PC travaille seul (modifiable plus tard dans Réglages)", value="none",
                         variable=self.mode, command=self._refresh).pack(anchor="w", pady=(6, 0))
@@ -313,7 +306,7 @@ class SetupWizard:
 
     def _refresh(self) -> None:
         state = "normal" if self.mode.get() == "folder" else "disabled"
-        for widget in (self.entry, self.browse, self.reference_box, self.schedule_box):
+        for widget in (self.entry, self.browse, self.schedule_box):
             widget.configure(state=state)
         self.note.configure(text="" if state == "disabled" else self.note.cget("text"))
         if state == "normal":
@@ -354,22 +347,19 @@ class SetupWizard:
             self.note.configure(foreground="#6b7280", text="Ce dossier sera créé. Ce PC sera le premier à publier.")
         else:
             self.note.configure(foreground="#b91c1c", text="Dossier introuvable (le dossier parent doit exister).")
-        if not self.reference_touched:
-            self.reference.set(share.default_wealth_reference(info))
 
     def _validate(self) -> None:
         from tkinter import messagebox
 
         if self.mode.get() == "none":
-            self.result = {"folder": None, "wealth_reference": False, "schedule": False}
+            self.result = {"folder": None, "schedule": False}
         else:
             try:
                 folder = share.validate_folder(self.folder.get())
             except share.ShareError as exc:
                 messagebox.showerror("PATRICK", str(exc), parent=self.win)
                 return
-            self.result = {"folder": folder, "wealth_reference": bool(self.reference.get()),
-                           "schedule": bool(self.schedule.get())}
+            self.result = {"folder": folder, "schedule": bool(self.schedule.get())}
         self.win.destroy()
 
     def _later(self) -> None:

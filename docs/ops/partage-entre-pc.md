@@ -15,7 +15,7 @@ niveau par **union** : aucun run n'est jamais perdu ni écrasé, quel que soit l
 
 | Commande | Effet |
 |---|---|
-| `patrick sync setup --folder <dossier> [--schedule] [--wealth-reference]` | à faire **une fois par PC** : mémorise le dossier partagé (`--schedule` : crée aussi la tâche Windows `PATRICK-Sync`, publication toutes les heures s'il y a du neuf; `--wealth-reference` : ce PC est la référence du patrimoine, voir plus bas) |
+| `patrick sync setup --folder <dossier> [--schedule]` | à faire **une fois par PC** : mémorise le dossier partagé (`--schedule` : crée aussi la tâche Windows `PATRICK-Sync`, publication toutes les heures s'il y a du neuf; `--wealth-reference` ne sert plus qu'au passage à la fusion du patrimoine, voir plus bas) |
 | `patrick sync status` | dit ce que `auto` ferait, sans rien modifier |
 | `patrick sync auto [--only pull\|push] [--min-push-hours N]` | fusionne ce que l'autre PC a publié, puis publie ce que ce PC a de neuf (au plus toutes les N heures ; défaut : réglage `sync_min_push_hours`, sinon 24 ; `0` = sans délai) |
 | `patrick sync merge --from <dossier> [--dry-run-to f.db]` | fusion explicite (à blanc : écrit dans `f.db`, la base locale n'est pas touchée) |
@@ -28,8 +28,8 @@ Les données lourdes (magasin, modèles, caches, sauvegardes) peuvent vivre sur 
 absents du partage et le dépannage du message « Fichier corrompu (sha256 différent) »).
 
 **Mise en place sur un nouveau PC** : `app\Installer.bat` (installe tout), puis au premier démarrage choisir le
-**même** dossier OneDrive que sur le premier PC, sans cocher « référence du patrimoine » (ce PC adopte le
-patrimoine de la référence). La première fusion peut durer plusieurs minutes. (À la main, depuis la version
+**même** dossier OneDrive que sur le premier PC (le patrimoine des autres PC arrive à la première synchronisation).
+La première fusion peut durer plusieurs minutes. (À la main, depuis la version
 stable, PATRICK fermé : `patrick sync setup --folder "<dossier OneDrive>" --schedule`.)
 
 ### Règles de la fusion
@@ -40,13 +40,30 @@ stable, PATRICK fermé : `patrick sync setup --folder "<dossier OneDrive>" --sch
 - Champions : le plus récent (`promoted_at`) gagne pour une même (cible, horizon). Registre des essais (DSR) :
   union dédoublonnée. Caches SHAP/volatilité, snapshots, symboles exclus : union par clé.
 - Magasin de données (parquet) : on n'ajoute que les fichiers absents.
-- **Patrimoine (`wealth_*`) : un PC de référence.** Les deux PC avaient importé les mêmes comptes sous des
-  identifiants différents : une union créerait des doublons. Le PC marqué `--wealth-reference`
-  (celui de Léon : `PC_de_LPD`) publie le sien avec la base; **les autres PC le REMPLACENT par celui du
-  partage à chaque fusion** (la base locale est sauvegardée avant). Le patrimoine se modifie donc sur le PC de
-  référence; une modification faite ailleurs est perdue à la fusion suivante. Un PC non-référence publie sans
-  patrimoine (il n'écrase jamais celui de la référence), et ne l'adopte que si le partage en contient.
-  Sans PC de référence, chacun garde le sien. `simulation` (ancien simulateur) reste locale dans tous les cas.
+- **Patrimoine (`wealth_*`) : fusionné ligne par ligne, sans PC de référence** (depuis le 27/11/2026, ADR 0031 ;
+  avant, un PC de référence le publiait et les autres le remplaçaient par le sien). On le modifie sur n'importe quel
+  PC. Chacun publie le sien dans `wealth-<nom du PC>.db.gz` + `wealth-<nom du PC>.json` et fusionne ceux des autres
+  à chaque `sync auto` (ouverture de PATRICK, tâche horaire), même PATRICK ouvert ou pendant un entraînement, comme
+  un `git merge` qui se résout tout seul :
+  - un compte est identifié par son `account_id`, un mouvement par son `uid` (le même sur tous les PC) ;
+  - une ligne ajoutée d'un côté arrive de l'autre ; une ligne modifiée des deux côtés garde **la modification la
+    plus récente** (horloge des PC ; à date égale, le même choix partout), l'autre version est sauvegardée dans
+    `~/.patrick/backups/patrimoine_fusion_*.json` ;
+  - une suppression se propage (trace datée `wealth_deleted`), sauf si la ligne a été modifiée ailleurs après la
+    suppression ; un compte supprimé revient avec ses mouvements si l'autre PC y a ajouté un mouvement après ;
+  - le même relevé importé sur les deux PC avant leur échange n'est pas compté deux fois : les mouvements
+    identiques (compte, date, type, titre, quantité, prix, montant, frais, taux, échéance) sont reconnus et
+    rangés sous un seul identifiant.
+
+  **Passage depuis l'ancien partage, automatique** : l'ancien PC de référence (`sync_wealth_reference: true`,
+  `DESKTOP-AV3KKV0`) passe à la fusion dès sa mise à jour et publie son patrimoine marqué « référence ». Un PC qui
+  l'adoptait en reprend alors une **dernière** fois la copie (la sienne n'a pas trace des suppressions faites depuis sa
+  dernière adoption ; une fusion les ressusciterait), puis fusionne. Tant que la référence n'est pas à jour, il attend
+  (message « passage à la fusion entre PC en attente ») et continue d'adopter son patrimoine avec la base de
+  recherche ; il publie son fichier marqué `merged: false`, qu'aucun PC ne fusionne. Sans ancien PC de référence,
+  deux PC qui avaient chacun le leur les fusionnent (attention aux doublons de comptes créés des deux côtés). **Une
+  saisie faite sur un PC avant son passage est perdue** : importer après le message « passage à la fusion entre PC ».
+  `simulation` (ancien simulateur) reste locale dans tous les cas.
 - **Fonds (`fund_*`) : fusionnés, jamais remplacés** (depuis le 14/10/2026; avant, un PC non-référence perdait
   ses portefeuilles à la fusion). Chaque PC publie les siens dans `funds-<nom du PC>.db.gz` + `funds-<nom du PC>.json`
   (le nom est celui de l'ordinateur, réglable par `sync_pc_name`) et fusionne ceux des autres, **stratégie par

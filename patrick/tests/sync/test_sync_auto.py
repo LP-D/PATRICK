@@ -13,6 +13,7 @@ from test_sync_merge import _seed
 from patrick.fund import store as fund_store
 from patrick.sync import core as sync
 from patrick.tracking import db as trackdb
+from patrick.wealth import ledger
 
 
 class PC:
@@ -247,55 +248,112 @@ def _published_personal(share: Path) -> bool:
     return json.loads((share / "manifest.json").read_text(encoding="utf-8"))["personal_included"]
 
 
-def test_the_reference_pc_publishes_its_wealth_and_the_other_pc_adopts_it(pcs):
+def _new_account(pc: PC, name: str) -> str:
+    conn = trackdb.connect(pc.db)
+    try:
+        return ledger.create_account(conn, name, "CTO")
+    finally:
+        conn.close()
+
+
+def _delete_account(pc: PC, account_id: str) -> None:
+    conn = trackdb.connect(pc.db)
+    try:
+        ledger.delete_account(conn, account_id)
+    finally:
+        conn.close()
+
+
+def _wealth_files(share: Path) -> list[str]:
+    return sorted(p.name for p in share.glob("wealth-*"))
+
+
+def test_the_old_reference_hands_over_its_wealth_then_both_pcs_merge(pcs):
+    """Passage à la fusion : l'ancien PC de référence publie son patrimoine dans le nouveau format, l'autre PC en reprend une
+    dernière fois la copie, puis chacun modifie le sien et les modifications passent dans les deux sens."""
+    ref, other, share = pcs
+    ref.seed(["a1"], wealth="acc_ref")
+    other.seed(["b1"], wealth="acc_other")                   # copie périmée, sans trace des suppressions de la référence
+    ref.use()
+    sync.settings_mod.save({sync.KEY_WEALTH_REFERENCE: True})
+
+    out = ref.auto(share)
+    assert "patrimoine publié : 1 compte(s)" in " ".join(out["actions"])
+    assert _wealth_files(share) == ["wealth-pc1.db.gz", "wealth-pc1.json"]
+
+    out2 = other.auto(share)
+    assert "passage à la fusion entre PC, dernière reprise de celui de pc1" in " ".join(out2["actions"])
+    assert _wealth(other) == [("acc_ref",)] and other.runs() == {"a1", "b1"}
+    assert sync.wealth_merged()
+
+    ref.auto(share)                                          # rien de neuf côté patrimoine : la copie de l'autre PC est la même
+    assert _wealth(ref) == [("acc_ref",)]
+
+    added = _new_account(other, "ouvert sur pc2")            # modifié sur l'ancien PC « suiveur »...
+    assert "patrimoine publié" in " ".join(other.auto(share)["actions"])
+    out3 = ref.auto(share)
+    assert "patrimoine de pc2 : 1 compte(s) ajouté(s)" in " ".join(out3["actions"])
+    assert _wealth(ref) == sorted([("acc_ref",), (added,)])  # ...reçu par l'ancienne référence
+
+    _delete_account(ref, added)                              # et une suppression faite sur l'ancienne référence...
+    ref.auto(share)
+    out4 = other.auto(share)
+    assert "1 compte(s) supprimé(s)" in " ".join(out4["actions"])
+    assert _wealth(other) == _wealth(ref) == [("acc_ref",)]  # ...disparaît de l'autre PC
+
+
+def test_a_pc_keeps_adopting_until_the_old_reference_publishes_in_the_new_format(pcs):
     ref, other, share = pcs
     ref.seed(["a1"], wealth="acc_ref")
     other.seed(["b1"], wealth="acc_other")
     ref.use()
     sync.settings_mod.save({sync.KEY_WEALTH_REFERENCE: True})
+    with pytest.MonkeyPatch.context() as mp:                 # l'ancienne référence n'a pas encore la nouvelle version
+        mp.setattr(sync, "_wealth_stage", lambda *args, **kwargs: None)
+        ref.auto(share)
 
-    out = ref.auto(share)
-    assert "patrimoine inclus" in out["actions"][0] and _published_personal(share)
+    out = other.auto(share)
 
-    out2 = other.auto(share)                                 # l'autre PC fusionne, adopte, puis republie sans patrimoine
-    assert "patrimoine du PC de référence adopté" in out2["actions"][0]
-    assert _wealth(other) == [("acc_ref",)]                  # le sien est remplacé par celui de la référence
-    assert other.runs() == {"a1", "b1"}
-    assert not _published_personal(share)                    # une publication non-référence n'écrase pas le patrimoine
+    assert "patrimoine du PC de référence adopté" in out["actions"][0]
+    assert "passage à la fusion entre PC en attente" in " ".join(out["skipped"])
+    assert not sync.wealth_merged()
+    waiting = json.loads((share / "wealth-pc2.json").read_text(encoding="utf-8"))
+    assert waiting["merged"] is False                        # publié pour être vu, jamais fusionné
 
-    out3 = ref.auto(share)                                   # la référence fusionne b1 mais garde son patrimoine
-    assert [a.split(" :")[0] for a in out3["actions"]] == ["fusion"]
-    assert _wealth(ref) == [("acc_ref",)] and ref.runs() == {"a1", "b1"}
+    out_ref = ref.auto(share)                                # mise à jour de la référence : elle ne fusionne pas la copie périmée
+    assert not any(a.startswith("patrimoine de pc2") for a in out_ref["actions"])
+    assert "passage à la fusion" in " ".join(other.auto(share)["actions"])
+    assert _wealth(other) == _wealth(ref) == [("acc_ref",)]
 
 
-def test_a_wealth_change_on_the_reference_pc_triggers_a_publication(pcs):
+def test_without_a_reference_pc_the_wealth_of_both_pcs_is_merged(pcs):
+    pc1, pc2, share = pcs
+    pc1.seed(["a1"], wealth="acc_1")
+    pc2.seed(["b1"], wealth="acc_2")
+
+    pc1.auto(share)                                          # seul : il attend, et publie pour être vu
+    pc2.auto(share)                                          # l'autre ne se dit pas référence : pas de référence, on fusionne
+    pc1.auto(share)
+    pc2.auto(share)
+
+    assert not _published_personal(share)
+    assert _wealth(pc1) == _wealth(pc2) == [("acc_1",), ("acc_2",)]
+
+
+def test_a_wealth_change_is_published_without_republishing_the_research(pcs):
     ref, other, share = pcs
     ref.seed(["a1"], wealth="acc_ref")
     ref.use()
     sync.settings_mod.save({sync.KEY_WEALTH_REFERENCE: True})
     ref.auto(share)
+    ref.auto(share)                                          # la base de recherche ne porte plus le patrimoine : republiée une fois
     assert ref.auto(share) == {"actions": [], "skipped": []}
 
-    conn = sqlite3.connect(ref.db)
-    conn.execute("INSERT INTO wealth_account (account_id, name, kind, mode) VALUES ('acc_new', 'neuf', 'CTO', 'real')")
-    conn.commit()
-    conn.close()
+    added = _new_account(ref, "neuf")
 
-    assert [a.split(" :")[0] for a in ref.auto(share)["actions"]] == ["publication"]
+    assert [a.split(" :")[0] for a in ref.auto(share)["actions"]] == ["patrimoine publié"]
     other.auto(share)
-    assert _wealth(other) == [("acc_new",), ("acc_ref",)]
-
-
-def test_without_a_reference_pc_each_pc_keeps_its_own_wealth(pcs):
-    pc1, pc2, share = pcs
-    pc1.seed(["a1"], wealth="acc_1")
-    pc2.seed(["b1"], wealth="acc_2")
-
-    pc1.auto(share)
-    pc2.auto(share)
-
-    assert not _published_personal(share)
-    assert _wealth(pc1) == [("acc_1",)] and _wealth(pc2) == [("acc_2",)]
+    assert _wealth(other) == sorted([("acc_ref",), (added,)])
 
 
 # --- fonds : chaque PC publie les siens dans un fichier à lui, tous fusionnent par union ------------------------

@@ -181,7 +181,7 @@ def test_merge_dry_run_leaves_the_local_database_alone(tmp_path, monkeypatch):
     conn.close()
 
 
-def test_setup_marks_this_pc_as_the_wealth_reference(tmp_path, monkeypatch):
+def test_setup_marks_this_pc_as_the_former_wealth_reference(tmp_path, monkeypatch):
     share = tmp_path / "share"
     share.mkdir()
     _pc_env(tmp_path, monkeypatch, "pc1")
@@ -189,14 +189,15 @@ def test_setup_marks_this_pc_as_the_wealth_reference(tmp_path, monkeypatch):
 
     plain = runner.invoke(app, ["sync", "setup", "--folder", str(share)])
     assert plain.exit_code == 0 and "référence" not in plain.output          # défaut : inchangé
-    assert "adopté du PC de référence" in runner.invoke(app, ["sync", "status"]).output
+    status = runner.invoke(app, ["sync", "status"]).output
+    assert "passage à la fusion entre PC au prochain échange." in status
 
     marked = runner.invoke(app, ["sync", "setup", "--folder", str(share), "--wealth-reference"])
-    assert "il le publie" in marked.output
-    assert "ce PC est la référence" in runner.invoke(app, ["sync", "status"]).output
+    assert "sa copie fait foi" in marked.output
+    assert "ce PC était la référence" in runner.invoke(app, ["sync", "status"]).output
 
     runner.invoke(app, ["sync", "setup", "--folder", str(share), "--no-wealth-reference"])
-    assert "adopté du PC de référence" in runner.invoke(app, ["sync", "status"]).output
+    assert "ce PC était la référence" not in runner.invoke(app, ["sync", "status"]).output
 
 
 def test_push_reports_what_was_written_and_the_old_format_files_left_behind(tmp_path, monkeypatch):

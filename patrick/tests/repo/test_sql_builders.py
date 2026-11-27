@@ -16,6 +16,7 @@ REVIEWED: dict[str, str] = {
     "earnings/store.py": "UPDATE earn_batch_item : clés filtrées par `allowed` ; INSERT earn_calendar : `_CAL_COLS` du module",
     "fund/limit_orders.py": "UPDATE fund_limit_order : `_update` refuse toute clé hors `_UPDATABLE`",
     "fund/share.py": "ON CONFLICT DO UPDATE : colonnes fixes du module",
+    "wealth/share.py": "tables de `TABLES` (constante du module), colonnes lues du schéma local (PRAGMA) et croisées avec le fichier reçu",
     "fund/store.py": "UPDATE fund_strategy : `allowed` ; fund_order : `_ORDER_COLUMNS` ; `_NOW` constante",
     "fund/systematic.py": "DELETE : seulement des marques `?`",
     "storage/cache_eviction.py": "DELETE FROM {table} : tables d'une liste fixe du module",

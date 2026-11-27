@@ -29,13 +29,12 @@ SETTINGS_STRINGS: dict[str, dict[str, str]] = {
     "app_share_browse": _s("Parcourir…", "Browse…"),
     "app_share_save": _s("Enregistrer le dossier", "Save folder"),
     "app_share_clear": _s("Ne plus partager (ce PC seul)", "Stop sharing (this PC only)"),
-    "app_share_reference": _s("Ce PC est la référence du patrimoine (comptes)",
-                              "This PC is the reference for wealth (accounts)"),
-    "app_share_reference_hint": _s(
-        "Il publie son patrimoine dans le dossier partagé ; les autres PC l'adoptent en remplaçant le leur. "
+    "app_share_wealth_hint": _s(
+        "Le patrimoine (comptes, mouvements) est fusionné entre les PC, sans PC de référence : une modification faite sur l'un "
+        "arrive sur les autres au prochain échange ; si deux PC modifient la même ligne, la modification la plus récente l'emporte. "
         "Choisis donc un dossier privé.",
-        "It publishes its wealth data into the shared folder; the other PCs adopt it, replacing their own. "
-        "Pick a private folder."),
+        "Wealth data (accounts, movements) is merged between the PCs, with no reference PC: a change made on one reaches the "
+        "others at the next exchange; if two PCs change the same row, the most recent change wins. Pick a private folder."),
     "app_share_schedule": _s("Publier ce PC automatiquement toutes les heures (tâche planifiée Windows)",
                              "Publish this PC automatically every hour (Windows scheduled task)"),
     "app_share_auto_title": _s("Au démarrage et à la fermeture", "At startup and on exit"),
@@ -78,10 +77,12 @@ SETTINGS_STRINGS: dict[str, dict[str, str]] = {
     "app_status_data_low": _s("Disque de données presque plein : {free} Go libres seulement ({path}). Les caches et sauvegardes risquent d'échouer : libère de la place.",
                               "Data disk almost full: only {free} GB free ({path}). Caches and backups may fail: free some space."),
     "app_status_data_missing": _s("Disque de données introuvable : {path}.", "Data disk not found: {path}."),
-    "app_status_role_ref": _s("Patrimoine : ce PC est la référence (il le publie).",
-                              "Wealth: this PC is the reference (it publishes it)."),
-    "app_status_role_follow": _s("Patrimoine : adopté du PC de référence s'il en publie un, sinon local.",
-                                 "Wealth: adopted from the reference PC if it publishes one, otherwise local."),
+    "app_status_role_merge": _s("Patrimoine : fusionné avec les autres PC à chaque échange.",
+                                "Wealth: merged with the other PCs at every exchange."),
+    "app_status_role_switch": _s("Patrimoine : passage à la fusion entre PC au prochain échange (après la mise à jour de "
+                                 "l'ancien PC de référence).",
+                                 "Wealth: switching to merging between PCs at the next exchange (once the former reference "
+                                 "PC is updated)."),
     "app_task_on": _s("Publication horaire active (prochaine : {next})", "Hourly publication active (next: {next})"),
     "app_task_off": _s("Publication horaire inactive.", "Hourly publication inactive."),
     "app_lastsync_title": _s("Dernière synchronisation au démarrage", "Last sync at startup"),
@@ -158,7 +159,7 @@ SETTINGS_JS_KEYS: tuple[str, ...] = (
     "app_inspect_empty", "app_inspect_create", "app_inspect_readonly", "app_inspect_missing", "app_inspect_other",
     "app_status_loading", "app_status_local", "app_status_remote", "app_status_remote_empty", "app_status_last",
     "app_status_never", "app_status_todo", "app_status_uptodate", "app_status_pull", "app_status_push",
-    "app_status_disk", "app_status_disk_low", "app_status_data_disk", "app_status_data_low", "app_status_data_missing", "app_status_role_ref", "app_status_role_follow", "app_task_on", "app_task_off", "app_confirm_clear",
+    "app_status_disk", "app_status_disk_low", "app_status_data_disk", "app_status_data_low", "app_status_data_missing", "app_status_role_merge", "app_status_role_switch", "app_task_on", "app_task_off", "app_confirm_clear",
     "app_confirm_sync", "app_confirm_update",
     "app_share_clear_label", "app_share_sync_now_label", "app_update_apply_label", "app_relaunch_lost", "app_busy_training", "app_update_uptodate",
     "app_update_available", "app_update_checking", "app_shortcuts_done", "app_backup_info", "app_backup_none",

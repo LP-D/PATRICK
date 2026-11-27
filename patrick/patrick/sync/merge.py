@@ -23,9 +23,9 @@ Règles :
 - `prediction_journal` : chaque PC garde sa chaîne d'empreintes; les lignes de l'autre sont recopiées telles quelles et marquées `imported_from` (migration 0050,
   `tracking/journal.py::verify` les vérifie une à une);
 - caches (`shap_selection_cache`, `vol_model_cache`) : union par clé;
-- jamais fusionnés par union : patrimoine (`wealth_*`), `simulation` (les deux PC avaient importé les
-  mêmes comptes sous des identifiants différents, une union créerait des doublons). Le patrimoine a un
-  PC de RÉFÉRENCE qui le publie; les autres le remplacent par le sien (`adopt_personal_tables`).
+- patrimoine (`wealth_*`) : jamais fusionné ici. Il voyage dans un petit fichier par PC et se fusionne ligne par ligne,
+  sans PC de référence (`patrick.wealth.share`, 2026-11-27). `adopt_personal_tables` ne sert plus qu'au passage : tant
+  qu'un PC n'est pas passé à la fusion, il adopte le patrimoine que l'ancien PC de RÉFÉRENCE ajoute à la base de recherche.
   `simulation` et l'état d'exécution (`worker_heartbeat`; jobs importés mis en erreur) restent locaux.
 - les fonds (`fund_*`) ne passent PAS par ici : chaque PC publie les siens dans un petit fichier à lui
   et fusionne ceux des autres, stratégie par stratégie (`patrick.fund.share`). Ils ne sont donc jamais
@@ -45,8 +45,8 @@ _BY_KEY = ("snapshot", "excluded_symbol", "drift_feature_reference",
            "shap_selection_cache", "vol_model_cache")
 
 
-# Patrimoine : un PC « référence » le publie, les autres le REMPLACENT par celui du partage
-# (`adopt_personal_tables`). Parents avant enfants. `simulation` en est exclue : elle renvoie à des
+# Patrimoine de l'ancien partage (jusqu'au passage à la fusion, voir `patrick.wealth.share`) : un PC « référence » le
+# publiait, les autres le REMPLAÇAIENT par celui du partage (`adopt_personal_tables`). Parents avant enfants. `simulation` en est exclue : elle renvoie à des
 # `trial_id` propres à chaque base. Les fonds n'en font plus partie (14/10/2026 : l'adoption effaçait les
 # portefeuilles créés sur un PC qui n'est pas la référence) : ils se fusionnent, voir `patrick.fund.share`.
 ADOPTED_PERSONAL_TABLES = ("wealth_account", "wealth_movement")

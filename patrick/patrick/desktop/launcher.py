@@ -180,7 +180,7 @@ def step_first_run(rep: Reporter) -> None:
         log("assistant : reporté (Plus tard)")
         return
     try:
-        result = share.apply(choice["folder"], wealth_reference=choice["wealth_reference"],
+        result = share.apply(choice["folder"], wealth_reference=choice.get("wealth_reference"),
                              schedule=choice["schedule"])
     except share.ShareError as exc:
         rep.error(str(exc))

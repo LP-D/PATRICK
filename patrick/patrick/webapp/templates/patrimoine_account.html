@@ -58,7 +58,7 @@
 {% set proxied = [] %}
 {% for p in detail.risk.proxied or [] %}{% set _ = proxied.append(p.symbol ~ " " ~ t('pat_via') ~ " " ~ p.proxy ~ " × " ~ ("%.1f" | format(p.scale)) ~ (" (" ~ t('pat_prior') ~ ")" if p.scale_source == "prior" else " (" ~ t('pat_estimated') ~ ")")) %}{% endfor %}
 {{ metric(t('pat_risk'), (detail.risk.volatility | pct) if detail.risk.volatility is not none else "—",
-          t('pat_risk_a') ~ ((" ; " ~ t('pat_risk_b') ~ (perf.volatility | pct)) if perf.volatility is not none else "") ~ ((" ; " ~ t('pat_risk_c') ~ (perf.max_drawdown | pct)) if perf.max_drawdown is not none else "") ~ ((" ; " ~ t('pat_vol_e') ~ (proxied | join(', ')) ~ " — " ~ t('pat_risk_d')) if proxied else "") ~ ".",
+          t('pat_risk_a') ~ ((" ; " ~ t('pat_risk_b') ~ (perf.volatility | pct)) if perf.volatility is not none else "") ~ ((" ; " ~ t('pat_risk_c') ~ (perf.max_drawdown | pct)) if perf.max_drawdown is not none else "") ~ ((" ; " ~ t('pat_vol_e') ~ (proxied | join(', ')) ~ " — " ~ t('pat_risk_d')) if proxied else "") ~ ((" ; " ~ (detail.risk.covered_weight | pct(0)) ~ t('pat_vol_c') ~ ", " ~ t('pat_vol_d') ~ (detail.risk.excluded | join(', '))) if detail.risk.excluded else "") ~ ".",
           ("warning" if proxied else "neutral") if detail.risk.volatility is not none else "pending") }}
 </div>
 {# FO19 (25/11) : comparer ce compte réel à un fonds simulé #}
@@ -92,12 +92,12 @@
   {% for r in h.rows %}
   {# Cellules HTML via {% set %} : une concatenation `~` avec un operande
      Markup (| e, icon(), macro) echapperait les morceaux HTML litteraux. #}
-  {% set symbol_cell %}<span title="{{ r.symbol }}">{{ r.symbol | iname }}</span>{% endset %}
-  {% set price_cell %}<span title="{{ r.price_source }}">{{ r.price | eur }}</span>{% if r.price_source == 'prix de transaction' %} <span class="tag">{{ t('pat_tx_tag') }}</span>{% endif %}{% endset %}
+  {% set symbol_cell %}<span title="{{ r.symbol }}">{{ r.symbol | iname }}</span>{% if r.is_bond %} <span class="tag" title="{{ t('pat_bond_tip', c=(r.rate | pct(3) if r.rate is not none else '—'), m=(r.maturity or '—'), a=(r.accrued | eur), y=(r.ytm | pct(2) if r.ytm is not none else '—'), s=r.price_source) }}">{{ t('pat_bond_tag') }}</span>{% endif %}{% endset %}
+  {% set price_cell %}<span title="{{ r.price_source }}">{{ r.price | pct(2) if r.is_bond else r.price | eur }}</span>{% if r.price_source == 'prix de transaction' %} <span class="tag">{{ t('pat_tx_tag') }}</span>{% endif %}{% endset %}
   {% set _ = rows.append([
       symbol_cell,
       r.quantity | qty,
-      r.pru | eur if r.pru is not none else '—',
+      (r.pru | pct(2) if r.is_bond else r.pru | eur) if r.pru is not none else '—',
       price_cell,
       r.value | eur,
       r.weight | pct,
@@ -106,7 +106,7 @@
   {% endfor %}
   {{ data_table([t('mv_col_asset'), t('mv_col_qty'), "PRU", t('pat_c_price'), t('pat_c_value'), t('pat_c_weight'), t('pat_c_pnl_short')], rows, t('pat_acc_none'),
                 num_cols=[1, 2, 3, 4, 5, 6],
-                footer=t('pat_acc_foot', i=(h.income | eur), f=(h.fees | eur))) }}
+                footer=t('pat_acc_foot', i=(h.income | eur), f=(h.fees | eur)) ~ ((' ' ~ t('pat_bond_foot')) if h.rows | selectattr('is_bond') | list else '')) }}
 </section>
 
 
@@ -164,7 +164,7 @@
       m.kind | mvkind,
       symbol_cell,
       m.quantity | qty if m.quantity is not none else '',
-      m.price | eur if m.price is not none else '',
+      (m.price | pct(2) if m.maturity and m.kind in ('buy', 'sell') else m.price | eur) if m.price is not none else '',
       '<span class="' ~ ('pos' if m.amount >= 0 else 'neg') ~ '">' ~ (m.amount | eur) ~ '</span>',
       note_cell,
       delete_cell,

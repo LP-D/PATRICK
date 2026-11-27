@@ -14,9 +14,17 @@ Conventions
 - A term deposit (`term_deposit`, *dépôt à terme*) moves `-amount` out of
   cash into a position `symbol` (default `DAT:<id>`) carrying `rate` and
   `maturity`; it has no price history (see performance.py).
+- A bond is a buy/sell carrying `maturity` (and `rate`, its coupon):
+  quantity = nominal, price = clean price as a fraction of nominal (a quote
+  in % is divided by 100), and the broker's `amount` is KEPT -- it holds the
+  accrued interest paid or received (see wealth/bonds.py).
 - Real vs fictive: a fictive account is a sandbox (blank, or a clone of a
   real one). A movement never goes from a fictive account into a real one;
   dragging a real movement onto a fictive account copies it.
+- Sharing between PCs (wealth/share.py, migration 0062): every write stamps
+  `updated_at`, a movement carries a `uid` common to all PCs, and a deletion
+  leaves a dated trace in `wealth_deleted`, so that the PCs can merge their
+  ledgers row by row without a reference PC.
 """
 from __future__ import annotations
 
@@ -26,6 +34,8 @@ import uuid
 from dataclasses import dataclass, field
 
 import pandas as pd
+
+from patrick.wealth import bonds
 
 ACCOUNT_KINDS = ("PEA", "CTO", "AV", "LIVRET", "DAT", "AUTRE")
 ACCOUNT_MODES = ("real", "fictive")
@@ -48,6 +58,18 @@ PEA_LIKELY_ELIGIBLE_SUFFIXES = (".PA", ".DE", ".F", ".AS", ".BR", ".MI", ".MC", 
 
 class LedgerError(ValueError):
     """Invalid account/movement input (400 at the API)."""
+
+
+NOW_SQL = "strftime('%Y-%m-%d %H:%M:%f', 'now')"      # UTC to the millisecond: compares as text (`updated_at`, `deleted_at`)
+
+
+def new_movement_uid() -> str:
+    return f"mv_{uuid.uuid4().hex}"
+
+
+def _tombstone(conn: sqlite3.Connection, kind: str, uid: str | None) -> None:
+    if uid:
+        conn.execute(f"INSERT OR REPLACE INTO wealth_deleted (kind, uid, deleted_at) VALUES (?, ?, {NOW_SQL})", (kind, uid))
 
 
 def _iso_date(value) -> str:
@@ -89,7 +111,7 @@ def create_account(conn: sqlite3.Connection, name: str, kind: str, mode: str = "
     with conn:
         conn.execute(
             "INSERT INTO wealth_account (account_id, name, kind, mode, currency, benchmark, opened_on, "
-            "source_account_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            f"source_account_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, {NOW_SQL})",
             (account_id, name[:120], kind, mode, (currency or "EUR").upper()[:3], benchmark or None,
              _iso_date(opened_on) if opened_on else None, source_account_id),
         )
@@ -125,7 +147,8 @@ def update_account(conn: sqlite3.Connection, account_id: str, **fields) -> None:
         fields["opened_on"] = _iso_date(fields["opened_on"])
     sets = ", ".join(f"{k} = ?" for k in fields)
     with conn:
-        conn.execute(f"UPDATE wealth_account SET {sets} WHERE account_id = ?", (*fields.values(), account_id))
+        conn.execute(f"UPDATE wealth_account SET {sets}, updated_at = {NOW_SQL} WHERE account_id = ?",
+                     (*fields.values(), account_id))
 
 
 def clone_as_fictive(conn: sqlite3.Connection, account_id: str, name: str | None = None) -> str:
@@ -143,6 +166,7 @@ def clone_as_fictive(conn: sqlite3.Connection, account_id: str, name: str | None
 def delete_account(conn: sqlite3.Connection, account_id: str) -> None:
     with conn:
         conn.execute("DELETE FROM wealth_account WHERE account_id = ?", (account_id,))
+        _tombstone(conn, "account", account_id)      # its movements go with it (ON DELETE CASCADE) on every PC
 
 
 # --------------------------------------------------------------- movements
@@ -173,8 +197,14 @@ def normalize_movement(raw: dict) -> dict:
             raise LedgerError(f"{kind} : symbole manquant")
         if quantity is None or quantity <= 0 or price is None or price <= 0:
             raise LedgerError(f"{kind} : quantité et prix strictement positifs requis")
+        if maturity:
+            price = bonds.quote_as_fraction(price)
         gross = quantity * price
-        amount = -(gross + fees) if kind == "buy" else gross - fees
+        derived = -(gross + fees) if kind == "buy" else gross - fees
+        if maturity and amount is not None:
+            amount = _bond_amount(kind, amount, derived, quantity, rate)
+        else:
+            amount = derived
     elif kind == "term_deposit":
         if amount is None or amount == 0:
             raise LedgerError("dépôt à terme : montant requis")
@@ -194,13 +224,26 @@ def normalize_movement(raw: dict) -> dict:
             "note": (raw.get("note") or "").strip()[:300] or None}
 
 
+def _bond_amount(kind: str, amount: float, derived: float, nominal: float, rate: float | None) -> float:
+    """The broker's cash amount of a bond trade, signed, once checked: what
+    it adds to quantity x price and fees is the accrued interest, never
+    negative nor more than a year of coupon (15 % without a known coupon)."""
+    amount = -abs(amount) if kind == "buy" else abs(amount)
+    accrued = abs(amount) - abs(derived)
+    cap = nominal * (rate if rate else 0.15) + 0.05
+    if accrued < -0.05 or accrued > cap:
+        raise LedgerError(f"obligation : montant {abs(amount):.2f} incohérent avec quantité x prix et frais "
+                          f"({abs(derived):.2f}) -- coupon couru implicite {accrued:.2f}")
+    return amount
+
+
 def _insert_movement(conn: sqlite3.Connection, account_id: str, mv: dict) -> int:
     with conn:
         cur = conn.execute(
             "INSERT INTO wealth_movement (account_id, ts, kind, symbol, quantity, price, amount, fees, rate, "
-            "maturity, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            f"maturity, note, uid, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, {NOW_SQL})",
             (account_id, mv["ts"], mv["kind"], mv["symbol"], mv["quantity"], mv["price"], mv["amount"],
-             mv["fees"], mv["rate"], mv["maturity"], mv["note"]),
+             mv["fees"], mv["rate"], mv["maturity"], mv["note"], new_movement_uid()),
         )
     return int(cur.lastrowid)
 
@@ -229,7 +272,9 @@ def list_movements(conn: sqlite3.Connection, account_id: str | None = None) -> l
 
 def delete_movement(conn: sqlite3.Connection, movement_id: int) -> None:
     with conn:
+        row = conn.execute("SELECT uid FROM wealth_movement WHERE movement_id = ?", (movement_id,)).fetchone()
         conn.execute("DELETE FROM wealth_movement WHERE movement_id = ?", (movement_id,))
+        _tombstone(conn, "movement", row[0] if row else None)
 
 
 def transfer_movement(conn: sqlite3.Connection, movement_id: int, target_account_id: str) -> dict:
@@ -252,7 +297,7 @@ def transfer_movement(conn: sqlite3.Connection, movement_id: int, target_account
         new_id = _insert_movement(conn, target_account_id, mv)
         return {"action": "copied", "movement_id": new_id}
     with conn:
-        conn.execute("UPDATE wealth_movement SET account_id = ? WHERE movement_id = ?",
+        conn.execute(f"UPDATE wealth_movement SET account_id = ?, updated_at = {NOW_SQL} WHERE movement_id = ?",
                      (target_account_id, movement_id))
     return {"action": "moved", "movement_id": movement_id}
 
@@ -266,10 +311,12 @@ class Position:
     cost: float = 0.0                 # total cost of the open quantity (PRU x quantity)
     realized: float = 0.0
     is_term_deposit: bool = False
-    rate: float | None = None
+    is_bond: bool = False
+    rate: float | None = None         # DAT: interest rate; bond: coupon
     start: str | None = None
     maturity: str | None = None
     last_trade_price: float | None = None
+    last_trade_ts: str | None = None
 
     @property
     def pru(self) -> float | None:
@@ -323,9 +370,12 @@ def apply_movement(st: LedgerState, mv: dict) -> None:
         qty = float(mv["quantity"])
         pos.cost += -amount
         pos.quantity += qty
-        pos.last_trade_price = float(mv["price"])
+        pos.last_trade_price, pos.last_trade_ts = float(mv["price"]), mv["ts"]
         if kind == "term_deposit":
             pos.is_term_deposit, pos.rate, pos.start, pos.maturity = True, mv["rate"], mv["ts"], mv["maturity"]
+        elif mv.get("maturity"):
+            pos.is_bond, pos.maturity = True, mv["maturity"]
+            pos.rate = mv.get("rate") if mv.get("rate") is not None else pos.rate
     elif kind == "sell":
         pos = st.positions.setdefault(mv["symbol"], Position(mv["symbol"]))
         qty = float(mv["quantity"])
@@ -336,7 +386,7 @@ def apply_movement(st: LedgerState, mv: dict) -> None:
         pos.realized += amount - pru * sold
         pos.cost -= pru * sold
         pos.quantity -= sold
-        pos.last_trade_price = float(mv["price"])
+        pos.last_trade_price, pos.last_trade_ts = float(mv["price"]), mv["ts"]
 
 
 def regulatory_warnings(account: dict, movements: list[dict], cutoff: str | None = None) -> list[str]:

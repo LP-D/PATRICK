@@ -18,6 +18,16 @@ Closes are NOT dividend-adjusted (`auto_adjust=False`, split-adjusted
 only): the ledger records dividends as income movements, so an adjusted
 series would count every dividend twice (once in the price appreciation,
 once as cash) and overstate the performance by the dividend yield.
+
+Currency: a quote in another currency than the account's is converted at
+Yahoo's daily rate (`EURUSD=X`: USD per EUR, so close / rate), else a USD
+close would be read as euros (Anthropic, quoted on Yahoo in USD only, was
+bought in EUR). The quote currency comes from the venue suffix
+(`quote_currency`): a bare ticker is a US listing; an index (`^`), a rate
+(`=X`) or an unknown venue are left as they are. Without the rate the
+series is dropped (the position falls back on its EUR trade price) rather
+than shown in the wrong currency. A bare ISIN (a bond Yahoo does not
+quote) is never asked to Yahoo.
 """
 from __future__ import annotations
 
@@ -27,9 +37,30 @@ import yfinance as yf
 from patrick.data.sources.yfinance_source import clean_symbol
 from patrick.data.store import DataStore
 from patrick.storage.cache_manager import LocalCache
+from patrick.wealth import symbols
 
 HISTORY_START = "2000-01-01"
 PRICE_MAX_AGE_DAYS = 0.25  # 6 h
+# Quote currency of the non-EUR venues whose unit is certain (London is not:
+# pence for most lines, USD or GBP for some ETFs -- left as is).
+_SUFFIX_CURRENCY = {".SW": "CHF", ".TO": "CAD", ".V": "CAD", ".NE": "CAD", ".ST": "SEK", ".CO": "DKK",
+                    ".OL": "NOK", ".T": "JPY", ".HK": "HKD", ".AX": "AUD", ".SA": "BRL", ".WA": "PLN"}
+
+
+def quote_currency(symbol: str) -> str | None:
+    """Currency of a Yahoo quote from its symbol alone; None = unknown or
+    not a price (index, exchange rate, future): never converted."""
+    s = (symbol or "").upper()
+    if not s or s.startswith("^") or "=" in s or symbols.ISIN_RE.fullmatch(s):
+        return None
+    head, _, tail = s.rpartition("-")
+    if head and len(tail) == 3 and tail.isalpha():          # crypto: AXS-EUR, BTC-USD
+        return tail
+    dot = s.rfind(".")
+    if dot > 0:
+        suffix = s[dot:]
+        return "EUR" if suffix in symbols.EUR_SUFFIXES else _SUFFIX_CURRENCY.get(suffix)
+    return "USD"
 
 
 def _download(symbol: str) -> pd.Series | None:
@@ -67,16 +98,14 @@ def _from_lake(store: DataStore, symbol: str) -> pd.Series | None:
     return df[col].dropna()
 
 
-def make_provider(store: DataStore | None = None, allow_network: bool = True):
+def make_provider(store: DataStore | None = None, allow_network: bool = True, currency: str = "EUR"):
     store = store or DataStore()
+    currency = (currency or "EUR").upper()
     memo: dict[str, pd.Series | None] = {}
 
-    def get(symbol: str) -> pd.Series | None:
-        if not symbol or symbol.startswith("DAT:"):
-            return None
-        if symbol in memo:
-            return memo[symbol]
-        series = fetch_latest(symbol) if allow_network else None
+    def raw(symbol: str) -> pd.Series | None:
+        network = allow_network and not symbols.ISIN_RE.fullmatch(symbol.upper())
+        series = fetch_latest(symbol) if network else None
         if series is None:
             series = _from_lake(store, symbol)
         if series is not None:
@@ -86,6 +115,24 @@ def make_provider(store: DataStore | None = None, allow_network: bool = True):
             series = series[~series.index.duplicated(keep="last")].sort_index()
             if series.empty:
                 series = None
+        return series
+
+    def get(symbol: str) -> pd.Series | None:
+        if not symbol or symbol.startswith("DAT:"):
+            return None
+        if symbol in memo:
+            return memo[symbol]
+        series = raw(symbol)
+        ccy = quote_currency(symbol)
+        if series is not None and ccy and ccy != currency:
+            rate = get(f"{currency}{ccy}=X")
+            if rate is None:
+                print(f"  [WARN] {symbol} : cours {currency}{ccy} indisponible, cotation en {ccy} écartée")
+                series = None
+            else:
+                aligned = rate.reindex(rate.index.union(series.index)).ffill().bfill().reindex(series.index)
+                series = (series / aligned).dropna()
+                series = series if len(series) else None
         memo[symbol] = series
         return series
 

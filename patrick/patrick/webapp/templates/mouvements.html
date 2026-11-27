@@ -56,7 +56,7 @@
       <td>{{ m.kind | mvkind }}</td>
       <td title="{{ m.symbol or '' }}">{{ m.symbol | iname }}</td>
       <td class="num">{{ m.quantity | qty if m.quantity is not none else '' }}</td>
-      <td class="num">{{ m.price | eur if m.price is not none else '' }}</td>
+      <td class="num">{{ (m.price | pct(2) if m.maturity and m.kind in ('buy', 'sell') else m.price | eur) if m.price is not none else '' }}</td>
       <td class="num {{ 'pos' if m.amount >= 0 else 'neg' }}">{{ m.amount | eur }}</td>
       <td>{{ m.note or '' }}</td>
     </tr>
