@@ -32,8 +32,8 @@ COUPON_GRID = 0.00025             # coupons are multiples of 0.025 % (2 %, 2.4 %
 COUPON_SNAP_TOL = 0.00005
 MIN_ACCRUED_FOR_INFERENCE = 0.5   # EUR: below, the rounding of the amount drowns the coupon
 
-_OAT_RE = re.compile(r"\bO\.?\s?A\.?\s?T\b\.?", re.I)
-_BOND_RE = re.compile(r"\b(?:bond|bonds|obligation|obligations|oblig|anleihe|bund|btp|treasury|gilt)\b", re.I)
+_OAT_RE = re.compile(r"\bO\.?\s?A\.?\s?T\b\.?", re.IGNORECASE)
+_BOND_RE = re.compile(r"\b(?:bond|bonds|obligation|obligations|oblig|anleihe|bund|btp|treasury|gilt)\b", re.IGNORECASE)
 _FULL_DATE_RE = re.compile(r"\b(\d{1,2})[/.-](\d{1,2})[/.-](20\d{2}|\d{2})\b")
 _COUPON_RE = re.compile(r"(?<![\d.,])(\d{1,2}(?:[.,]\d{1,4})?)\s?%")
 _MONTHS = {"jan": 1, "janv": 1, "feb": 2, "fev": 2, "fevr": 2, "mar": 3, "mars": 3, "mrz": 3, "maer": 3, "apr": 4,
