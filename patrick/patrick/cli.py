@@ -955,9 +955,9 @@ def sync_setup_cmd(
     schedule: bool = typer.Option(False, "--schedule", help="Windows : crée aussi la tâche planifiée « PATRICK-Sync » "
                                                             "(publie ce PC toutes les heures s'il y a du neuf)"),
     wealth_reference: bool = typer.Option(None, "--wealth-reference/--no-wealth-reference",
-                                          help="Ce PC est la RÉFÉRENCE du patrimoine et des fonds : il les publie, "
-                                               "les autres PC adoptent les siens (en remplaçant les leurs). "
-                                               "Défaut : inchangé (aucun PC n'est référence)"),
+                                          help="Ancien partage : ce PC était la RÉFÉRENCE du patrimoine. Ne sert plus "
+                                               "qu'au passage à la fusion entre PC (sa copie fait foi une dernière fois). "
+                                               "Défaut : inchangé"),
 ) -> None:
     """Enregistre le dossier de partage de CE PC (à faire une fois par PC) : `sync auto` s'en sert."""
     from patrick.core import settings
@@ -972,8 +972,8 @@ def sync_setup_cmd(
     settings.save(updates)
     typer.echo(f"Dossier de partage enregistré : {folder}")
     if wealth_reference is not None:
-        typer.echo("Ce PC est la référence du patrimoine : il le publie." if wealth_reference
-                   else "Ce PC adopte le patrimoine publié par le PC de référence.")
+        typer.echo("Ce PC est l'ancienne référence du patrimoine : sa copie fait foi au passage à la fusion entre PC."
+                   if wealth_reference else "Ce PC n'est pas l'ancienne référence du patrimoine.")
     if schedule:
         try:
             typer.echo(f"Tâche planifiée {sync.SYNC_TASK} créée : {sync.register_task()}")
@@ -998,8 +998,11 @@ def sync_status_cmd(folder: str = typer.Option(None, "--folder", help="Défaut :
     typer.echo(f"Partage : {folder}")
     typer.echo("  " + (f"{remote['runs']} run(s), publié le {remote['created_at']}" if remote else "vide"))
     typer.echo(f"Ce PC : {st['local_runs']} run(s); dernier échange : {st['last_exchange'] or 'jamais'}")
-    typer.echo("Patrimoine : ce PC est la référence (il le publie)." if st["wealth_reference"]
-               else "Patrimoine : adopté du PC de référence s'il en publie un, sinon local.")
+    if st["wealth_merged"]:
+        typer.echo("Patrimoine : fusionné avec les autres PC à chaque échange.")
+    else:
+        typer.echo("Patrimoine : passage à la fusion entre PC au prochain échange"
+                   + (" (ce PC était la référence : sa copie fait foi)." if st["wealth_reference"] else "."))
     todo = [label for flag, label in ((st["need_pull"], "fusionner le partage"),
                                        (st["need_push"], "publier ce PC")) if flag]
     typer.echo("À faire : " + (" puis ".join(todo) if todo else "rien, tout est à jour"))

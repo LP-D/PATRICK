@@ -19,6 +19,11 @@ synchronisé, privé) accepte `include_personal=True`.
 À la restauration (`pull`), les tables personnelles du PC local sont
 conservées : la recherche vient du partage, le patrimoine reste local.
 
+Patrimoine et fonds voyagent à part, dans un petit fichier par PC, à chaque `auto` (même pendant un entraînement) : chaque PC
+fusionne ceux des autres. Fonds : stratégie par stratégie (`patrick.fund.share`). Patrimoine : ligne par ligne, sans PC de
+référence (`patrick.wealth.share`, 2026-11-27). L'ancien partage du patrimoine (un PC de référence l'ajoutait à la base de
+recherche, les autres l'adoptaient) ne sert plus qu'au passage : voir `_wealth_switch`.
+
 Destinations :
 - `github` : release glissante `data-latest` du dépôt (`gh` doit être connecté),
   assets jusqu'à 2 Go, hors de l'historique git;
@@ -50,6 +55,7 @@ from patrick.sync import merge as sync_merge
 from patrick.sync import tree as sync_tree
 from patrick.tracking import backup as backup_mod
 from patrick.tracking import db as trackdb
+from patrick.wealth import share as wealth_share
 
 GITHUB_TAG = "data-latest"
 DB_ASSET = "patrick.db.gz"
@@ -930,8 +936,14 @@ def configured_folder() -> str | None:
 
 
 def is_wealth_reference() -> bool:
-    """Ce PC est-il la référence du patrimoine ? Seul lui le publie; les autres adoptent celui du partage."""
+    """Ce PC était-il la référence du patrimoine de l'ancien partage (il le publiait, les autres l'adoptaient) ? Ne sert plus
+    qu'au passage à la fusion ligne par ligne (`_wealth_switch`) : sa copie fait foi une dernière fois."""
     return bool(settings_mod.load().get(KEY_WEALTH_REFERENCE))
+
+
+def wealth_merged() -> bool:
+    """Ce PC est-il passé à la fusion du patrimoine entre PC (plus d'adoption de celui d'un PC de référence) ?"""
+    return load_state().get("wealth_mode") == "merge"
 
 
 def fingerprint(db_path: str, *, personal: bool = False) -> str:
@@ -1182,13 +1194,14 @@ def status(folder: str, *, db_path: str | None = None) -> dict:
     db_path = db_path or trackdb.default_db_path()
     state, stamp = load_state(), remote_stamp(folder)
     exists = os.path.exists(db_path)
-    reference = is_wealth_reference()
-    local_fp = fingerprint(db_path, personal=reference) if exists else None
+    reference, merged = is_wealth_reference(), wealth_merged()
+    local_fp = fingerprint(db_path, personal=reference and not merged) if exists else None
     need_pull = stamp is not None and stamp["sha"] != state.get("remote_sha")
     local_changed = exists and local_fp != state.get("local_fp")
     data_root = paths.configured_data_root()
     data_available = paths.data_root_missing() is None
     return {"folder": folder, "remote": stamp, "last_exchange": state.get("at"), "wealth_reference": reference,
+            "wealth_merged": merged,
             "local_runs": _count_runs(db_path) if exists else 0,
             "disk_free_gb": round(_free_bytes(db_path) / 1e9, 1), "db_gb": round(os.path.getsize(db_path) / 1e9, 1) if exists else 0.0,
             "data_root": str(data_root) if data_root else None, "data_available": data_available,
@@ -1231,12 +1244,16 @@ def auto(folder: str, *, only: str | None = None, wealth_reference: bool | None 
     """Met ce PC et le partage à niveau : fusionne ce que l'autre PC a publié, puis publie ce que ce PC a de
     neuf. `only="pull"` / `"push"` limite à une moitié. Rien de risqué : pas de fusion tant qu'un entraînement
     tourne ou que PATRICK est ouvert, pas de publication tant qu'un entraînement tourne ni si le partage a
-    bougé sans avoir été fusionné. `wealth_reference` (défaut : réglage de ce PC) : ce PC publie son
-    patrimoine et ses fonds, sinon il adopte ceux du partage. Renvoie `{"actions": [...], "skipped": [...]}`."""
+    bougé sans avoir été fusionné. Patrimoine et fonds : échangés à la fin, à chaque passage, fusionnés entre PC
+    (`_wealth_stage`, `_funds_stage`). `wealth_reference` (défaut : réglage de ce PC) : ancien PC de référence du
+    patrimoine ; tant que ce PC n'est pas passé à la fusion, la référence ajoute son patrimoine à la base de recherche et
+    les autres l'adoptent. Renvoie `{"actions": [...], "skipped": [...]}`."""
     if only not in (None, "pull", "push"):
         raise SyncError("only doit être 'pull', 'push' ou omis.")
     db_path = db_path or trackdb.default_db_path()
     reference = is_wealth_reference() if wealth_reference is None else wealth_reference
+    legacy = not wealth_merged()                 # ancien partage du patrimoine, jusqu'au passage à la fusion
+    personal = reference and legacy              # la référence ajoute son patrimoine à la base de recherche
     out: dict = {"actions": [], "skipped": []}
     problem = paths.data_root_problem()
     if problem:                  # sauvegardes, modèles et magasin vivent sur le disque de données : rien à faire sans lui
@@ -1248,17 +1265,17 @@ def auto(folder: str, *, only: str | None = None, wealth_reference: bool | None 
         if _job_running(db_path):
             out["skipped"].append("fusion reportée : un entraînement est en cours")
         else:
-            fp_before = fingerprint(db_path, personal=reference) if os.path.exists(db_path) else None
+            fp_before = fingerprint(db_path, personal=personal) if os.path.exists(db_path) else None
             try:
                 res = merge(folder, db_path=db_path, store_root=store_root, models_dir=models_dir,
-                            backup_dir=backup_dir, adopt_personal=not reference)
+                            backup_dir=backup_dir, adopt_personal=legacy and not reference)
             except SyncError as exc:
                 out["skipped"].append(f"fusion reportée : {exc}")
             else:
                 # Rien à publier si ce PC n'avait rien de neuf et que le partage contenait déjà tout son contenu.
                 clean = state.get("local_fp") == fp_before and res["local_only_runs"] == 0
                 save_state(remote_sha=res["remote_sha"],
-                           local_fp=fingerprint(db_path, personal=reference) if clean else state.get("local_fp"))
+                           local_fp=fingerprint(db_path, personal=personal) if clean else state.get("local_fp"))
                 note = " + patrimoine du PC de référence adopté" if res["personal"] else ""
                 out["actions"].append(f"fusion : {res['new_runs']} run(s) importé(s) du partage "
                                       f"({res['runs_before']} -> {res['runs_after']}){note}")
@@ -1266,7 +1283,7 @@ def auto(folder: str, *, only: str | None = None, wealth_reference: bool | None 
 
     if only in (None, "push") and os.path.exists(db_path):
         state, stamp = load_state(), remote_stamp(folder)
-        fp = fingerprint(db_path, personal=reference)
+        fp = fingerprint(db_path, personal=personal)
         if stamp is None or fp != state.get("local_fp"):
             if stamp is not None and stamp["sha"] != state.get("remote_sha"):
                 out["skipped"].append("publication reportée : le partage contient des données pas encore "
@@ -1277,16 +1294,17 @@ def auto(folder: str, *, only: str | None = None, wealth_reference: bool | None 
                 out["skipped"].append(late)
             else:
                 manifest = push(folder, db_path=db_path, store_root=store_root, models_roots=models_roots,
-                                include_personal=reference)
+                                include_personal=personal)
                 save_state(remote_sha=_db_entry(manifest)["sha256"], local_fp=fp,
                            pushed_at=datetime.now(UTC).isoformat(timespec="seconds"))
                 out["actions"].append(f"publication : {manifest['runs']} run(s), "
                                       f"{manifest['models']['included']} modèle(s)"
-                                      + (", patrimoine inclus" if reference else "")
+                                      + (", patrimoine inclus" if personal else "")
                                       + (f", anciens fichiers à supprimer du dossier : {', '.join(manifest['legacy_assets_left'])}"
                                          if manifest.get("legacy_assets_left") else ""))
     if os.path.exists(db_path):
         _funds_stage(folder, db_path, backup_dir, out)          # indépendant de la recherche et des entraînements
+        _wealth_stage(folder, db_path, backup_dir, out)         # idem
     return out
 
 
@@ -1383,6 +1401,149 @@ def _funds_stage(folder: str, db_path: str, backup_dir: str | None, out: dict) -
         _funds_publish(folder, db_path, out)
     except (SyncError, fund_share.FundShareError, sqlite3.Error, OSError) as exc:
         out["skipped"].append(f"fonds : {exc}")
+
+
+# --------------------------------------------------------------------------
+# Patrimoine : un fichier par PC, fusion ligne par ligne sans PC de référence (voir `patrick.wealth.share`)
+# --------------------------------------------------------------------------
+#
+# Même circuit que les fonds : chaque PC n'écrit que SON fichier (`wealth-<pc>.db.gz` + `wealth-<pc>.json`) et fusionne ceux
+# des autres à chaque passage, même PATRICK ouvert ou pendant un entraînement. Le .json dit aussi si son PC est passé à la
+# fusion (`merged`) et s'il était l'ancien PC de référence (`reference`) : le fichier d'un PC pas encore passé n'est jamais
+# fusionné (sa copie du patrimoine de la référence n'a pas trace des suppressions faites depuis, elle les ressusciterait).
+# État local : `wealth_seen` (empreinte de chaque fichier déjà fusionné), `wealth_fp` (empreinte de ce qu'on a publié),
+# `wealth_mode` ("merge" une fois passé à la fusion).
+
+WEALTH_PREFIX = "wealth-"
+
+
+def _wealth_peers(folder: str, out: dict) -> list[tuple[Path, dict, str]]:
+    """Fichiers de patrimoine publiés par les autres PC : `(chemin du .json, son contenu, nom du PC)`."""
+    own = f"{WEALTH_PREFIX}{pc_name()}.json"
+    peers = []
+    for meta_path in sorted(Path(folder).glob(f"{WEALTH_PREFIX}*.json")):
+        if meta_path.name == own:
+            continue
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            meta["sha256"] = str(meta["sha256"])
+        except (OSError, ValueError, KeyError, TypeError):
+            out["skipped"].append(f"patrimoine : {meta_path.name} illisible, réessayé au prochain passage")
+            continue
+        peers.append((meta_path, meta, meta.get("pc") or meta_path.stem[len(WEALTH_PREFIX):]))
+    return peers
+
+
+def _with_peer_wealth(meta_path: Path, meta: dict, action):
+    """Décompresse le fichier d'un autre PC (vérifié par son sha256) et lui applique `action(chemin de la base)`."""
+    gz = meta_path.with_name(meta_path.name[: -len(".json")] + ".db.gz")
+    if not gz.exists() or _sha256(gz) != meta["sha256"]:
+        raise SyncError("fichier pas encore entièrement recopié par le dossier partagé")
+    with tempfile.TemporaryDirectory() as tmp_s:
+        incoming = Path(tmp_s) / "incoming.db"
+        _gunzip_file(gz, incoming)
+        return action(incoming)
+
+
+def _wealth_switch(db_path: str, backup_dir: str | None, out: dict, peers: list) -> bool:
+    """Passage à la fusion, une fois par PC ; renvoie True si ce PC fusionne désormais.
+
+    - l'ancien PC de référence, et un PC sans patrimoine : tout de suite ;
+    - un PC qui adoptait le patrimoine de la référence : dès que la référence a publié le sien dans ce format, il en reprend une
+      DERNIÈRE fois la copie (la sienne n'a pas trace des suppressions faites depuis sa dernière adoption) ;
+    - un autre PC publie déjà dans ce format sans être la référence : il n'y a pas de référence, chacun avait le sien, on fusionne ;
+    - sinon il attend : l'ancien PC de référence n'a pas encore la nouvelle version (son patrimoine continue d'être repris avec
+      la base de recherche)."""
+    if is_wealth_reference() or not wealth_share.has_wealth(db_path):
+        save_state(wealth_mode="merge")
+        return True
+    for meta_path, meta, who in peers:
+        if not (meta.get("reference") and meta.get("merged")):
+            continue
+        try:
+            res = _with_peer_wealth(meta_path, meta,
+                                    lambda incoming: wealth_share.adopt_wealth(db_path, incoming, backup_dir=backup_dir))
+        except (SyncError, wealth_share.WealthShareError, sqlite3.Error, OSError, EOFError) as exc:
+            out["skipped"].append(f"patrimoine de {who} reporté : {exc}")
+            return False
+        save_state(wealth_mode="merge", wealth_seen={meta_path.name: meta["sha256"]})
+        out["actions"].append(f"patrimoine : passage à la fusion entre PC, dernière reprise de celui de {who} "
+                              f"({res['accounts']} compte(s), {res['movements']} mouvement(s))")
+        return True
+    if peers and not any(meta.get("reference") for _, meta, _ in peers):
+        save_state(wealth_mode="merge")
+        return True
+    out["skipped"].append("patrimoine : passage à la fusion entre PC en attente de l'autre PC (l'ancien PC de référence doit "
+                          "d'abord être mis à jour) ; en attendant, le patrimoine de la référence est repris tel quel")
+    return False
+
+
+_WEALTH_LABELS = (("accounts_added", "compte(s) ajouté(s)"), ("accounts_updated", "compte(s) mis à jour"),
+                  ("accounts_deleted", "compte(s) supprimé(s)"), ("movements_added", "mouvement(s) ajouté(s)"),
+                  ("movements_updated", "mouvement(s) modifié(s)"), ("movements_deleted", "mouvement(s) supprimé(s)"),
+                  ("duplicates", "mouvement(s) saisi(s) sur les deux PC reconnu(s) comme un seul"))
+
+
+def _wealth_merge_others(db_path: str, backup_dir: str | None, out: dict, peers: list) -> None:
+    state = load_state()
+    seen = dict(state.get("wealth_seen") or {})
+    for meta_path, meta, who in peers:
+        if not meta.get("merged") or seen.get(meta_path.name) == meta["sha256"]:
+            continue
+        try:
+            res = _with_peer_wealth(meta_path, meta,
+                                    lambda incoming: wealth_share.merge_wealth(db_path, incoming, backup_dir=backup_dir))
+        except (SyncError, wealth_share.WealthShareError, sqlite3.Error, OSError, EOFError) as exc:
+            out["skipped"].append(f"patrimoine de {who} reporté : {exc}")
+            continue
+        seen[meta_path.name] = meta["sha256"]
+        parts = [f"{res[key]} {label}" for key, label in _WEALTH_LABELS if res[key]]
+        if parts:
+            out["actions"].append(f"patrimoine de {who} : " + ", ".join(parts)
+                                  + (f" (versions écartées sauvegardées : {res['backup']})" if res.get("backup") else ""))
+    if seen != (state.get("wealth_seen") or {}):
+        save_state(wealth_seen=seen)
+
+
+def _wealth_publish(folder: str, db_path: str, out: dict) -> None:
+    """Publie notre patrimoine s'il a changé depuis la dernière publication (ou si notre statut a changé). Un PC pas encore
+    passé à la fusion publie aussi (marqué `merged: false`, jamais fusionné) : c'est ainsi que deux PC sans référence se
+    découvrent."""
+    wealth_share.ensure_identities(db_path)
+    merged, reference = wealth_merged(), is_wealth_reference()
+    fp = f"{wealth_share.fingerprint(db_path)}:{int(merged)}{int(reference)}"
+    name = pc_name()
+    gz_name, json_name = f"{WEALTH_PREFIX}{name}.db.gz", f"{WEALTH_PREFIX}{name}.json"
+    published = (Path(folder) / json_name).exists()
+    if (fp == load_state().get("wealth_fp") and published) or (not published and not wealth_share.has_wealth(db_path)):
+        if fp != load_state().get("wealth_fp"):
+            save_state(wealth_fp=fp)
+        return
+    with tempfile.TemporaryDirectory() as tmp_s:
+        tmp = Path(tmp_s)
+        info = wealth_share.export_wealth(db_path, tmp / "wealth.db")
+        _gzip_file(tmp / "wealth.db", tmp / gz_name)
+        meta = {"format": 1, "pc": name, "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
+                "sha256": _sha256(tmp / gz_name), "size": (tmp / gz_name).stat().st_size,
+                "merged": merged, "reference": reference, **info}
+        (tmp / json_name).write_text(json.dumps(meta, indent=1), encoding="utf-8")
+        FolderTransport(folder).upload({gz_name: tmp / gz_name, json_name: tmp / json_name})   # le .json en dernier
+    save_state(wealth_fp=fp)
+    if merged:
+        out["actions"].append(f"patrimoine publié : {info['accounts']} compte(s), {info['movements']} mouvement(s)")
+
+
+def _wealth_stage(folder: str, db_path: str, backup_dir: str | None, out: dict) -> None:
+    """Fusionne le patrimoine des autres PC puis publie le nôtre s'il a changé. Ne lève jamais : un échec est noté dans
+    `out["skipped"]` et réessayé au prochain passage."""
+    try:
+        trackdb.connect(db_path).close()          # migration 0062 en attente : la tâche horaire peut passer avant PATRICK
+        peers = _wealth_peers(folder, out)
+        if wealth_merged() or _wealth_switch(db_path, backup_dir, out, peers):
+            _wealth_merge_others(db_path, backup_dir, out, peers)
+        _wealth_publish(folder, db_path, out)
+    except (SyncError, wealth_share.WealthShareError, sqlite3.Error, OSError) as exc:
+        out["skipped"].append(f"patrimoine : {exc}")
 
 
 SYNC_TASK = "PATRICK-Sync"

@@ -21,6 +21,10 @@ Conventions
 - Real vs fictive: a fictive account is a sandbox (blank, or a clone of a
   real one). A movement never goes from a fictive account into a real one;
   dragging a real movement onto a fictive account copies it.
+- Sharing between PCs (wealth/share.py, migration 0062): every write stamps
+  `updated_at`, a movement carries a `uid` common to all PCs, and a deletion
+  leaves a dated trace in `wealth_deleted`, so that the PCs can merge their
+  ledgers row by row without a reference PC.
 """
 from __future__ import annotations
 
@@ -54,6 +58,18 @@ PEA_LIKELY_ELIGIBLE_SUFFIXES = (".PA", ".DE", ".F", ".AS", ".BR", ".MI", ".MC", 
 
 class LedgerError(ValueError):
     """Invalid account/movement input (400 at the API)."""
+
+
+NOW_SQL = "strftime('%Y-%m-%d %H:%M:%f', 'now')"      # UTC to the millisecond: compares as text (`updated_at`, `deleted_at`)
+
+
+def new_movement_uid() -> str:
+    return f"mv_{uuid.uuid4().hex}"
+
+
+def _tombstone(conn: sqlite3.Connection, kind: str, uid: str | None) -> None:
+    if uid:
+        conn.execute(f"INSERT OR REPLACE INTO wealth_deleted (kind, uid, deleted_at) VALUES (?, ?, {NOW_SQL})", (kind, uid))
 
 
 def _iso_date(value) -> str:
@@ -95,7 +111,7 @@ def create_account(conn: sqlite3.Connection, name: str, kind: str, mode: str = "
     with conn:
         conn.execute(
             "INSERT INTO wealth_account (account_id, name, kind, mode, currency, benchmark, opened_on, "
-            "source_account_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            f"source_account_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, {NOW_SQL})",
             (account_id, name[:120], kind, mode, (currency or "EUR").upper()[:3], benchmark or None,
              _iso_date(opened_on) if opened_on else None, source_account_id),
         )
@@ -131,7 +147,8 @@ def update_account(conn: sqlite3.Connection, account_id: str, **fields) -> None:
         fields["opened_on"] = _iso_date(fields["opened_on"])
     sets = ", ".join(f"{k} = ?" for k in fields)
     with conn:
-        conn.execute(f"UPDATE wealth_account SET {sets} WHERE account_id = ?", (*fields.values(), account_id))
+        conn.execute(f"UPDATE wealth_account SET {sets}, updated_at = {NOW_SQL} WHERE account_id = ?",
+                     (*fields.values(), account_id))
 
 
 def clone_as_fictive(conn: sqlite3.Connection, account_id: str, name: str | None = None) -> str:
@@ -149,6 +166,7 @@ def clone_as_fictive(conn: sqlite3.Connection, account_id: str, name: str | None
 def delete_account(conn: sqlite3.Connection, account_id: str) -> None:
     with conn:
         conn.execute("DELETE FROM wealth_account WHERE account_id = ?", (account_id,))
+        _tombstone(conn, "account", account_id)      # its movements go with it (ON DELETE CASCADE) on every PC
 
 
 # --------------------------------------------------------------- movements
@@ -223,9 +241,9 @@ def _insert_movement(conn: sqlite3.Connection, account_id: str, mv: dict) -> int
     with conn:
         cur = conn.execute(
             "INSERT INTO wealth_movement (account_id, ts, kind, symbol, quantity, price, amount, fees, rate, "
-            "maturity, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            f"maturity, note, uid, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, {NOW_SQL})",
             (account_id, mv["ts"], mv["kind"], mv["symbol"], mv["quantity"], mv["price"], mv["amount"],
-             mv["fees"], mv["rate"], mv["maturity"], mv["note"]),
+             mv["fees"], mv["rate"], mv["maturity"], mv["note"], new_movement_uid()),
         )
     return int(cur.lastrowid)
 
@@ -254,7 +272,9 @@ def list_movements(conn: sqlite3.Connection, account_id: str | None = None) -> l
 
 def delete_movement(conn: sqlite3.Connection, movement_id: int) -> None:
     with conn:
+        row = conn.execute("SELECT uid FROM wealth_movement WHERE movement_id = ?", (movement_id,)).fetchone()
         conn.execute("DELETE FROM wealth_movement WHERE movement_id = ?", (movement_id,))
+        _tombstone(conn, "movement", row[0] if row else None)
 
 
 def transfer_movement(conn: sqlite3.Connection, movement_id: int, target_account_id: str) -> dict:
@@ -277,7 +297,7 @@ def transfer_movement(conn: sqlite3.Connection, movement_id: int, target_account
         new_id = _insert_movement(conn, target_account_id, mv)
         return {"action": "copied", "movement_id": new_id}
     with conn:
-        conn.execute("UPDATE wealth_movement SET account_id = ? WHERE movement_id = ?",
+        conn.execute(f"UPDATE wealth_movement SET account_id = ?, updated_at = {NOW_SQL} WHERE movement_id = ?",
                      (target_account_id, movement_id))
     return {"action": "moved", "movement_id": movement_id}
 

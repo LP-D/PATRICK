@@ -33,7 +33,7 @@
     }
     function failed(res) { flash(tr("app_error", {error: (res.data && res.data.error) || res.status}), "error"); }
 
-    var state = {overview: null, inspect: null, inspectTimer: null, referenceTouched: false};
+    var state = {overview: null, inspect: null, inspectTimer: null};
 
     // ------------------------------------------------------------------ vue d'ensemble
     function load() {
@@ -49,7 +49,6 @@
         var folder = o.share.folder;
         $("share-current").textContent = folder ? tr("app_share_current", {folder: folder}) : tr("app_share_none");
         $("share-folder").value = folder || "";
-        $("share-reference").checked = !!o.share.wealth_reference;
         $("share-clear").classList.toggle("hidden", !folder);
         $("share-open").classList.toggle("hidden", !folder);
         if ($("share-schedule")) {
@@ -116,7 +115,7 @@
             if (s.need_pull) { todo.push(tr("app_status_pull")); }
             if (s.need_push) { todo.push(tr("app_status_push")); }
             add(tr("app_status_todo", {todo: todo.length ? todo.join(" → ") : tr("app_status_uptodate")}));
-            add(s.wealth_reference ? tr("app_status_role_ref") : tr("app_status_role_follow"));
+            add(s.wealth_merged ? tr("app_status_role_merge") : tr("app_status_role_switch"));
             if (s.disk_free_gb !== undefined) {
                 add(tr(s.disk_free_gb < 10 ? "app_status_disk_low" : "app_status_disk", {free: s.disk_free_gb, db: s.db_gb}));
             }
@@ -151,10 +150,6 @@
             var i = res.data;
             if (!res.ok) { note.textContent = ""; return; }
             state.inspect = i;
-            // Premier réglage depuis cette page : même valeur par défaut que l'assistant (1er PC = référence).
-            if (!state.referenceTouched && !(state.overview && state.overview.share.folder)) {
-                $("share-reference").checked = !!i.default_wealth_reference;
-            }
             if (i.has_share) {
                 note.textContent = tr("app_inspect_share", {runs: i.runs, date: (i.created_at || "").slice(0, 10)});
             } else if (i.exists && !i.writable) {
@@ -183,11 +178,10 @@
         });
     });
 
-    $("share-reference").addEventListener("change", function () { state.referenceTouched = true; });
 
     $("share-save").addEventListener("click", function () {
         var folder = $("share-folder").value.trim();
-        var body = {folder: folder || null, wealth_reference: $("share-reference").checked};
+        var body = {folder: folder || null};
         if ($("share-schedule")) { body.schedule = $("share-schedule").checked; }
         api("POST", "/api/app/share/apply", body).then(function (res) {
             if (!res.ok) { return failed(res); }
