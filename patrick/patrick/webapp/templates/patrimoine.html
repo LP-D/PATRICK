@@ -83,7 +83,7 @@
   {% for r in data.holdings %}
   {# Cellules HTML via {% set %} : une concatenation `~` avec un operande
      Markup (| e, icon(), macro) echapperait les morceaux HTML litteraux. #}
-  {% set symbol_cell %}<span title="{{ r.symbol }}">{{ r.symbol | iname }}</span>{% if r.is_term_deposit %} <span class="tag">DAT</span>{% endif %}{% endset %}
+  {% set symbol_cell %}<span title="{{ r.symbol }}">{{ r.symbol | iname }}</span>{% if r.is_term_deposit %} <span class="tag">DAT</span>{% elif r.is_bond %} <span class="tag">{{ t('pat_bond_tag') }}</span>{% endif %}{% endset %}
   {% set _ = rows.append([
       symbol_cell,
       r.quantity | qty,

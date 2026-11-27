@@ -10,8 +10,10 @@ something else:
   in the account currency (EUR venues below, Paris first). The ISIN search
   alone may only return the home listing (US0231351067 -> AMZN, in USD):
   the name is searched next (`Amazon.com` -> AMZ.DE, in EUR). A quote in
-  another currency is kept as the last resort, with a warning -- the P&L
-  would compare a USD close with a EUR purchase price.
+  another currency is kept as the last resort, with a warning: the price
+  provider converts it into EUR (wealth/prices.py);
+- a bond: its ISIN only (its name, `Nov. 2032`, would match anything);
+  OATs are not on Yahoo -- the ISIN stays the symbol (wealth/bonds.py).
 A plain ticker (`MC.PA`, `AAPL`) is trusted as given.
 
 Offline (`search=None`), crypto codes are still mapped; ISINs are kept as
@@ -20,6 +22,8 @@ they are, with a warning.
 from __future__ import annotations
 
 import re
+
+from patrick.wealth import bonds
 
 ISIN_RE = re.compile(r"\b([A-Z]{2}[A-Z0-9]{9}\d)\b")
 # Trade Republic's pseudo-ISIN of a crypto-asset: XF000BTC0017, XF000AXS0014.
@@ -102,8 +106,16 @@ def make_resolver(currency: str = "EUR", search=yahoo_search):
         label = sym or name
         if not label:
             return None, None
+        bond = bonds.looks_like_bond(asset_class, name, text)
         if search is None:
             return label.upper()[:40], f"{label} : identifiant non résolu (hors ligne) -- position sans cours"
+        if bond:
+            # A bond's name ("Nov. 2032") would match anything: its ISIN only.
+            found, in_ccy = _pick(search(sym), currency) if sym else (None, False)
+            if found and in_ccy:
+                return found, None
+            return label.upper()[:40], (f"{label} : obligation sans cotation Yahoo -- valorisée au rendement constant "
+                                        "de l'achat, coupon couru compris")
         fallback = None
         for query in (sym, name):
             if not query:
@@ -113,7 +125,7 @@ def make_resolver(currency: str = "EUR", search=yahoo_search):
                 return found, None
             fallback = fallback or found
         if fallback:
-            return fallback, f"{label} -> {fallback} : cotation hors {currency}, plus-value faussée par le change"
+            return fallback, f"{label} -> {fallback} : cotation hors {currency}, convertie au cours de change Yahoo"
         return label.upper()[:40], f"{label} : introuvable sur Yahoo -- position sans cours"
 
     return resolve

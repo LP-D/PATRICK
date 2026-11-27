@@ -22,7 +22,17 @@ As tolerant as possible on the format -- a broker export goes in as it is:
 - symbols resolved to a Yahoo quote by `wealth.symbols` (crypto `AXS` ->
   `AXS-EUR`, ISIN -> its EUR listing), so every position gets a price;
 - an account column (`account_type`: DEFAULT / PEA) splits the file into
-  sources the caller maps onto accounts (`plan_import`).
+  sources the caller maps onto accounts (`plan_import`);
+- a net amount column (`Montant net`, LCL) includes the fees: the unit
+  price is derived from it net of fees, not gross;
+- bonds (`asset_class` BOND, an `O.A.T.` in the label): quantity = nominal,
+  price as a fraction of nominal, the broker's amount kept (accrued interest
+  included), maturity and coupon read from the line (`OAT 2% 25/11/2032`,
+  `Nov. 2032` for an OAT) or the coupon inferred from the accrued interest
+  paid (wealth/bonds.py) -- with a warning, never silently;
+- an IPO subscription (Trade Republic `IPO_SUBSCRIPTION`: the pre-payment,
+  then the reimbursement of what was not allotted) only reserves cash: not
+  booked, the allotted BUY line is (its fee is).
 
 Strict where it matters: every row still goes through
 `ledger.normalize_movement`; a row that fails is reported with its line
@@ -39,7 +49,7 @@ from collections import Counter
 
 import pandas as pd
 
-from patrick.wealth import symbols
+from patrick.wealth import bonds, symbols
 from patrick.wealth.ledger import LedgerError, normalize_movement
 
 MAX_BYTES = 1_000_000
@@ -108,6 +118,12 @@ _KIND_KEYWORD_RES = tuple((kind, re.compile(r"\b(?:" + "|".join(re.escape(w) for
 _FR_MONTHS = {"janv": 1, "fevr": 2, "fev": 2, "mars": 3, "avr": 4, "mai": 5, "juin": 6, "juil": 7, "aout": 8,
               "sept": 9, "oct": 10, "nov": 11, "dec": 12}
 _IBAN_RE = re.compile(r"\b([A-Z]{2}\d{2})[A-Z0-9]{7,26}([A-Z0-9]{4})\b")
+_IPO_RE = re.compile(r"\bipo\b")
+# Amount columns that include the fees (a buy's total debit, a sale's net credit).
+_NET_AMOUNT_HEADERS = {"montant net", "net amount"}
+# A column beaten for the symbol becomes the name when nothing claims it (LCL: ISIN + "Valeur").
+_FALLBACK_FIELD = {"symbol": "name"}
+_UNKNOWN_COUPON = "coupon inconnu"
 _NUMERIC = ("quantity", "price", "amount", "debit", "credit", "fees", "tax", "rate")
 
 
@@ -214,16 +230,27 @@ def _find_header(rows: list[list[str]]) -> int:
 
 
 def _map_columns(header: list[str]) -> dict[str, int]:
-    """field -> column index, the best-ranked alias winning."""
+    """field -> column index, the best-ranked alias winning; a beaten column
+    falls back on a related free field (`_FALLBACK_FIELD`)."""
     best: dict[str, tuple[int, int]] = {}
+    beaten: list[tuple[str, int]] = []
     for idx, h in enumerate(header):
         hit = _HEADER_RANK.get(_fold(h))
         if hit is None:
             continue
         key, rank = hit
         if key not in best or rank < best[key][0]:
+            if key in best:
+                beaten.append((key, best[key][1]))
             best[key] = (rank, idx)
-    return {key: idx for key, (_, idx) in best.items()}
+        else:
+            beaten.append((key, idx))
+    cols = {key: idx for key, (_, idx) in best.items()}
+    for key, idx in beaten:
+        fallback = _FALLBACK_FIELD.get(key)
+        if fallback and fallback not in cols:
+            cols[fallback] = idx
+    return cols
 
 
 def parse_csv(data: bytes | str, resolve=None) -> dict:
@@ -252,6 +279,7 @@ def parse_csv(data: bytes | str, resolve=None) -> dict:
     cols = _map_columns(header)
     if not ({"kind", "amount", "quantity", "debit", "credit"} & set(cols)):
         raise LedgerError("ni type, ni montant, ni quantité : rien à importer")
+    net_amount = "amount" in cols and _fold(header[cols["amount"]]) in _NET_AMOUNT_HEADERS
 
     records = []
     for line_no, cells in enumerate(all_rows[start + 1:], start=start + 2):
@@ -274,7 +302,7 @@ def parse_csv(data: bytes | str, resolve=None) -> dict:
             out["errors"].append({"line": line_no, "error": f"au-delà de {MAX_ROWS} lignes, ignoré"})
             break
         try:
-            rows, warnings = _parse_row(raw, signed, resolve)
+            rows, warnings = _parse_row(raw, signed, resolve, net_amount)
         except LedgerError as exc:
             out["errors"].append({"line": line_no, "error": str(exc)})
             continue
@@ -286,10 +314,60 @@ def parse_csv(data: bytes | str, resolve=None) -> dict:
             out["sources"][source] += 1
         out["warnings"].extend({"line": line_no, "warning": w} for w in warnings)
     out["sources"] = dict(out["sources"])
+    _share_bond_coupons(out)
     return out
 
 
-def _parse_row(raw: dict, signed: bool, resolve) -> tuple[list[dict], list[str]]:
+def _share_bond_coupons(out: dict) -> None:
+    """A bond line without a coupon takes the one found on another line of
+    the same bond (a 0.03 EUR remainder line has too little accrued interest
+    to infer it), and loses its "coupon inconnu" warning."""
+    known = {}
+    for r in out["rows"]:
+        if r.get("maturity") and r["kind"] in ("buy", "sell") and r.get("rate") is not None:
+            known.setdefault(r["symbol"], r["rate"])
+    filled = set()
+    for r in out["rows"]:
+        if r.get("maturity") and r["kind"] in ("buy", "sell") and r.get("rate") is None and r["symbol"] in known:
+            r["rate"] = known[r["symbol"]]
+            filled.add(r["line"])
+    out["warnings"] = [w for w in out["warnings"] if not (w["line"] in filled and _UNKNOWN_COUPON in w["warning"])]
+
+
+def _bond_fields(raw: dict, note: str, ts: str, qty: float | None, price: float | None,
+                 ex_fees: float | None) -> tuple[dict, list[str]]:
+    """{"price", "maturity", "rate"} of a bond line (price as a fraction of
+    nominal) and the warnings about what had to be read or inferred.
+    `ex_fees` = the trade's cash before fees (nominal x price + accrued)."""
+    warnings = []
+    name = raw.get("name") or ""
+    price = bonds.quote_as_fraction(price) if price else price
+    if price is None and qty and ex_fees:
+        price = bonds.quote_as_fraction(ex_fees / qty)
+    maturity = _parse_date(raw["maturity"]) if raw.get("maturity") else bonds.maturity_from_text(name, note)
+    rate = raw.get("rate_value")
+    if rate is None:
+        rate = bonds.coupon_from_text(name, note)
+    label = name or raw.get("symbol") or "obligation"
+    if maturity is None:
+        warnings.append(f"{label} : obligation sans échéance lisible, valorisée au prix payé coupon couru compris "
+                        "-- renseigner échéance et coupon du mouvement pour le coupon couru et le rendement")
+        return {"price": ex_fees / qty if qty and ex_fees else price, "maturity": None, "rate": rate}, warnings
+    if rate is None and qty and price and ex_fees:
+        accrued = ex_fees - qty * price
+        rate = bonds.infer_coupon(accrued, qty, maturity, ts)
+        if rate is not None:
+            warnings.append(f"{label} : coupon {rate:.3%} déduit du coupon couru ({accrued:.2f}) et de "
+                            f"l'échéance {maturity} -- à vérifier")
+    if rate is None:
+        warnings.append(f"{label} : {_UNKNOWN_COUPON} (échéance {maturity}) -- valorisé au dernier prix, sans coupon "
+                        "couru ; le renseigner dans le mouvement")
+    elif not raw.get("maturity"):
+        warnings.append(f"{label} : obligation, échéance {maturity} lue dans le libellé")
+    return {"price": price, "maturity": maturity, "rate": rate}, warnings
+
+
+def _parse_row(raw: dict, signed: bool, resolve, net_amount: bool = False) -> tuple[list[dict], list[str]]:
     warnings: list[str] = []
     ts = _parse_date(raw.get("ts", ""))
     nums = {k: _num(raw.get(k)) for k in _NUMERIC}
@@ -301,6 +379,15 @@ def _parse_row(raw: dict, signed: bool, resolve) -> tuple[list[dict], list[str]]
     label = raw.get("kind", "")
     note = _mask_ibans(raw.get("note", ""))
     has_asset = bool(raw.get("symbol") or raw.get("name") or symbols.ISIN_RE.search(note.upper()))
+
+    if _IPO_RE.search(_fold(label)) or (_IPO_RE.search(_fold(note)) and not qty):
+        rows = []
+        if costs:
+            rows.append(normalize_movement({"ts": ts, "kind": "fee", "amount": costs,
+                                            "note": f"frais de souscription : {note}" if note else "frais de souscription"}))
+        warnings.append(f"souscription IPO ({amount if amount is not None else 0:+.2f}) : réservation de liquidités, "
+                        "non comptabilisée -- seul l'achat attribué compte")
+        return rows, warnings
 
     kind, exact = _classify(label, note)
     if kind is None:
@@ -335,13 +422,25 @@ def _parse_row(raw: dict, signed: bool, resolve) -> tuple[list[dict], list[str]]
     if kind in ("buy", "sell"):
         qty = abs(qty) if qty else None
         price = abs(price) if price else None
-        if price is None and qty and amount:
-            price = abs(amount) / qty
-        if qty is None and price and amount:
-            qty = abs(amount) / price
         symbol, warning = resolve(raw.get("symbol"), raw.get("name"), raw.get("asset_class"), note)
         if warning:
             warnings.append(warning)
+        if bonds.looks_like_bond(raw.get("asset_class"), raw.get("name"), note):
+            ex_fees = None
+            if amount:
+                ex_fees = abs(amount) - (costs if kind == "buy" else -costs) if net_amount else abs(amount)
+            fields, bond_warnings = _bond_fields({**raw, "rate_value": nums["rate"]}, note, ts, qty, price, ex_fees)
+            warnings.extend(bond_warnings)
+            cash = None
+            if ex_fees is not None and fields["maturity"]:
+                cash = ex_fees + costs if kind == "buy" else ex_fees - costs
+            return [normalize_movement({**base, **fields, "symbol": symbol, "quantity": qty, "fees": costs,
+                                        "amount": cash})], warnings
+        if price is None and qty and amount:
+            net = abs(amount) - costs if kind == "buy" else abs(amount) + costs
+            price = (net if net_amount else abs(amount)) / qty
+        if qty is None and price and amount:
+            qty = abs(amount) / price
         return [normalize_movement({**base, "symbol": symbol, "quantity": qty, "price": price, "fees": costs})], warnings
 
     if kind == "term_deposit":
@@ -367,6 +466,9 @@ def movement_key(mv: dict) -> tuple:
             round(float(mv["amount"]), 2))
 
 
+NEAR_DUPLICATE_DAYS = 5
+
+
 def plan_import(rows: list[dict], mapping: dict, default_account: str, existing: dict[str, list[dict]]) -> list[dict]:
     """Target account and status of every parsed row. `mapping` = {source:
     account_id, or "" to skip that source}; unmapped sources go to
@@ -374,7 +476,11 @@ def plan_import(rows: list[dict], mapping: dict, default_account: str, existing:
     "virement interne" (a withdrawal of one source and a deposit of another,
     same day, same amount, landing in the same account: the pair cancels
     out), "doublon" (already in the target account: re-importing a file is
-    idempotent). `existing` = {account_id: its movements}."""
+    idempotent), "doublon probable" (the same movement, amount and quantity
+    included, already there at most `NEAR_DUPLICATE_DAYS` days apart and not
+    matched otherwise: a statement dated by value date against a movement
+    typed by hand -- not written, shown). `existing` = {account_id: its
+    movements}."""
     plan = []
     for row in rows:
         target = mapping.get(row.get("source"), default_account) if row.get("source") is not None else default_account
@@ -400,4 +506,21 @@ def plan_import(rows: list[dict], mapping: dict, default_account: str, existing:
             if counter[key] > 0:
                 counter[key] -= 1
                 p["status"] = "doublon"
+    # What the exact pass left unmatched, by identity without the date.
+    unmatched: dict[tuple, list[pd.Timestamp]] = {}
+    for acc, mvs in existing.items():
+        left = Counter(seen.get(acc, {}))
+        for m in mvs:
+            key = movement_key(m)
+            if left[key] > 0:
+                left[key] -= 1
+                unmatched.setdefault((acc, *key[1:]), []).append(pd.Timestamp(m["ts"]))
+    for p in plan:
+        if p["status"] == "":
+            days = unmatched.get((p["target"], *movement_key(p)[1:]), [])
+            ts = pd.Timestamp(p["ts"])
+            near = next((d for d in days if abs((d - ts).days) <= NEAR_DUPLICATE_DAYS), None)
+            if near is not None:
+                days.remove(near)
+                p["status"] = "doublon probable"
     return plan

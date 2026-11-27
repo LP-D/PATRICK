@@ -14,6 +14,10 @@ Conventions
 - A term deposit (`term_deposit`, *dépôt à terme*) moves `-amount` out of
   cash into a position `symbol` (default `DAT:<id>`) carrying `rate` and
   `maturity`; it has no price history (see performance.py).
+- A bond is a buy/sell carrying `maturity` (and `rate`, its coupon):
+  quantity = nominal, price = clean price as a fraction of nominal (a quote
+  in % is divided by 100), and the broker's `amount` is KEPT -- it holds the
+  accrued interest paid or received (see wealth/bonds.py).
 - Real vs fictive: a fictive account is a sandbox (blank, or a clone of a
   real one). A movement never goes from a fictive account into a real one;
   dragging a real movement onto a fictive account copies it.
@@ -26,6 +30,8 @@ import uuid
 from dataclasses import dataclass, field
 
 import pandas as pd
+
+from patrick.wealth import bonds
 
 ACCOUNT_KINDS = ("PEA", "CTO", "AV", "LIVRET", "DAT", "AUTRE")
 ACCOUNT_MODES = ("real", "fictive")
@@ -173,8 +179,14 @@ def normalize_movement(raw: dict) -> dict:
             raise LedgerError(f"{kind} : symbole manquant")
         if quantity is None or quantity <= 0 or price is None or price <= 0:
             raise LedgerError(f"{kind} : quantité et prix strictement positifs requis")
+        if maturity:
+            price = bonds.quote_as_fraction(price)
         gross = quantity * price
-        amount = -(gross + fees) if kind == "buy" else gross - fees
+        derived = -(gross + fees) if kind == "buy" else gross - fees
+        if maturity and amount is not None:
+            amount = _bond_amount(kind, amount, derived, quantity, rate)
+        else:
+            amount = derived
     elif kind == "term_deposit":
         if amount is None or amount == 0:
             raise LedgerError("dépôt à terme : montant requis")
@@ -192,6 +204,19 @@ def normalize_movement(raw: dict) -> dict:
     return {"ts": ts, "kind": kind, "symbol": symbol, "quantity": quantity, "price": price,
             "amount": round(amount, 6), "fees": fees, "rate": rate, "maturity": maturity,
             "note": (raw.get("note") or "").strip()[:300] or None}
+
+
+def _bond_amount(kind: str, amount: float, derived: float, nominal: float, rate: float | None) -> float:
+    """The broker's cash amount of a bond trade, signed, once checked: what
+    it adds to quantity x price and fees is the accrued interest, never
+    negative nor more than a year of coupon (15 % without a known coupon)."""
+    amount = -abs(amount) if kind == "buy" else abs(amount)
+    accrued = abs(amount) - abs(derived)
+    cap = nominal * (rate if rate else 0.15) + 0.05
+    if accrued < -0.05 or accrued > cap:
+        raise LedgerError(f"obligation : montant {abs(amount):.2f} incohérent avec quantité x prix et frais "
+                          f"({abs(derived):.2f}) -- coupon couru implicite {accrued:.2f}")
+    return amount
 
 
 def _insert_movement(conn: sqlite3.Connection, account_id: str, mv: dict) -> int:
@@ -266,10 +291,12 @@ class Position:
     cost: float = 0.0                 # total cost of the open quantity (PRU x quantity)
     realized: float = 0.0
     is_term_deposit: bool = False
-    rate: float | None = None
+    is_bond: bool = False
+    rate: float | None = None         # DAT: interest rate; bond: coupon
     start: str | None = None
     maturity: str | None = None
     last_trade_price: float | None = None
+    last_trade_ts: str | None = None
 
     @property
     def pru(self) -> float | None:
@@ -323,9 +350,12 @@ def apply_movement(st: LedgerState, mv: dict) -> None:
         qty = float(mv["quantity"])
         pos.cost += -amount
         pos.quantity += qty
-        pos.last_trade_price = float(mv["price"])
+        pos.last_trade_price, pos.last_trade_ts = float(mv["price"]), mv["ts"]
         if kind == "term_deposit":
             pos.is_term_deposit, pos.rate, pos.start, pos.maturity = True, mv["rate"], mv["ts"], mv["maturity"]
+        elif mv.get("maturity"):
+            pos.is_bond, pos.maturity = True, mv["maturity"]
+            pos.rate = mv.get("rate") if mv.get("rate") is not None else pos.rate
     elif kind == "sell":
         pos = st.positions.setdefault(mv["symbol"], Position(mv["symbol"]))
         qty = float(mv["quantity"])
@@ -336,7 +366,7 @@ def apply_movement(st: LedgerState, mv: dict) -> None:
         pos.realized += amount - pru * sold
         pos.cost -= pru * sold
         pos.quantity -= sold
-        pos.last_trade_price = float(mv["price"])
+        pos.last_trade_price, pos.last_trade_ts = float(mv["price"]), mv["ts"]
 
 
 def regulatory_warnings(account: dict, movements: list[dict], cutoff: str | None = None) -> list[str]:

@@ -63,7 +63,8 @@ def overview(conn: sqlite3.Connection, prices) -> dict:
             for r in h["rows"]:
                 c = consolidated.setdefault(r["symbol"], {"symbol": r["symbol"], "quantity": 0.0, "value": 0.0,
                                                           "cost": 0.0, "latent_pnl": 0.0,
-                                                          "is_term_deposit": r["is_term_deposit"]})
+                                                          "is_term_deposit": r["is_term_deposit"],
+                                                          "is_bond": r.get("is_bond", False)})
                 c["quantity"] += r["quantity"]
                 c["value"] += r["value"]
                 c["cost"] += r["cost"]

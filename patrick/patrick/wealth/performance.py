@@ -3,7 +3,9 @@
 Prices come from a `PriceProvider` (a callable symbol -> pd.Series of
 closes, or None). The web layer passes one that reads the local data lake
 first and only then the network; tests pass a dict. A symbol without any
-price keeps its last transaction price, and says so (`price_source`).
+price keeps its last transaction price, and says so (`price_source`). A
+bond is worth nominal x clean price + accrued interest; without quotes its
+clean price follows the constant yield of the last trade (wealth/bonds.py).
 
 Performance
 -----------
@@ -13,6 +15,13 @@ Performance
   close, so the flow earns nothing on its day; the start-of-day
   convention V_t / (V_{t-1} + F_t) - 1 credited it with the day's return
   and biased TWR (caught by test_twr_is_neutral_to_flows_while_xirr_is_not).
+  Except for the lots bought that day: their P&L from the trade to the
+  close (P_t, fees and accrued interest included) accrues on the capital
+  AFTER the day's flows. With X_t = V_t - F_t - P_t (the old portfolio at
+  the close), 1 + r_t = X_t / V_{t-1} x V_t / (X_t + F_t) -- the same as
+  above when P_t = 0, but 25 EUR of fees to invest a 5 000 EUR deposit
+  weigh on the 5 400 EUR invested that day (-0.5 %), not on the 400 EUR
+  held the day before (-6 %).
   Neutral to the size and timing of flows -- the number to compare with an
   index.
 - **XIRR** (money-weighted): the annual rate zeroing the net present value
@@ -39,9 +48,11 @@ import pandas as pd
 from scipy.optimize import brentq
 
 from patrick.core.clock import utc_today
+from patrick.wealth import bonds
 from patrick.wealth.ledger import (
     EXTERNAL_FLOW_KINDS,
     LedgerState,
+    Position,
     apply_movement,
     replay,
 )
@@ -68,12 +79,89 @@ def _price_at(series: pd.Series | None, day: pd.Timestamp) -> float | None:
     return float(s.iloc[-1]) if len(s) else None
 
 
+def _quote(series: pd.Series | None, day, pos: Position) -> float | None:
+    """Last close up to `day`, unless the position traded after it (a close
+    missing on the trade day: DCAM.PA on 2026-11-26): the trade price is
+    then the fresher information -- None, the caller uses it."""
+    if series is None or series.empty:
+        return None
+    s = series[series.index <= day]
+    if not len(s) or (pos.last_trade_ts and s.index[-1] < pd.Timestamp(pos.last_trade_ts)):
+        return None
+    return float(s.iloc[-1])
+
+
+_YIELD_MEMO: dict[tuple, float | None] = {}
+
+
+def _trade_yield(pos: Position) -> float | None:
+    """Yield of a bond's last trade (memoised: one solve per trade, not per
+    day of the valuation loop). None without a coupon."""
+    key = (pos.rate, pos.maturity, pos.last_trade_ts, pos.last_trade_price)
+    if key not in _YIELD_MEMO:
+        try:
+            _YIELD_MEMO[key] = bonds.yield_to_maturity(pos.rate, pos.maturity, pos.last_trade_ts,
+                                                      pos.last_trade_price) if pos.rate is not None else None
+        except bonds.BondError:
+            _YIELD_MEMO[key] = None
+    return _YIELD_MEMO[key]
+
+
+def bond_quote(pos: Position, series: pd.Series | None, day) -> tuple[float, str]:
+    """(clean price as a fraction of nominal, its source) of a bond on `day`."""
+    px = _quote(series, day, pos)
+    if px is not None:
+        return bonds.quote_as_fraction(px), "cotation"
+    if pd.Timestamp(day) >= pd.Timestamp(pos.maturity):
+        return 1.0, "remboursé au pair"
+    y = _trade_yield(pos)
+    if y is None:
+        return pos.last_trade_price or 0.0, "prix de transaction"
+    trade_day = pd.Timestamp(pos.last_trade_ts)
+    return bonds.clean_price(pos.rate, pos.maturity, max(pd.Timestamp(day), trade_day), y), "rendement constant"
+
+
+def position_value(pos: Position, series: pd.Series | None, day) -> dict:
+    """{"value", "price", "source", "accrued", "ytm"} of an open position on
+    `day`: term deposit at simple interest, bond at clean price + accrued
+    interest, anything else at the close (last trade price failing that)."""
+    if pos.is_term_deposit:
+        value = term_deposit_value(pos.cost, pos.rate or 0.0, pos.start, pos.maturity, day)
+        return {"value": value, "price": value, "source": f"DAT {pos.rate:.2%} \u2192 {pos.maturity}",
+                "accrued": None, "ytm": None}
+    if pos.is_bond:
+        price, source = bond_quote(pos, series, day)
+        accrued = bonds.accrued_interest(pos.quantity, pos.rate, pos.maturity, day)
+        ytm = None
+        if pos.rate is not None and pd.Timestamp(day) < pd.Timestamp(pos.maturity):
+            try:
+                ytm = bonds.yield_to_maturity(pos.rate, pos.maturity, day, price)
+            except bonds.BondError:
+                ytm = None
+        return {"value": pos.quantity * price + accrued, "price": price, "source": source, "accrued": accrued,
+                "ytm": ytm}
+    px = _quote(series, day, pos)
+    price, source = (px, "cotation") if px is not None else (pos.last_trade_price, "prix de transaction")
+    return {"value": pos.quantity * (price or 0.0), "price": price, "source": source, "accrued": None, "ytm": None}
+
+
+def _unit_value(pos: Position, series: pd.Series | None, day) -> float:
+    """Value of one unit of the position on `day` (a bond: clean price +
+    accrued interest per unit of nominal)."""
+    if pos.is_bond:
+        price, _ = bond_quote(pos, series, day)
+        return price + bonds.accrued_interest(1.0, pos.rate, pos.maturity, day)
+    px = _quote(series, day, pos)
+    return px if px is not None else (pos.last_trade_price or 0.0)
+
+
 def valuation_series(movements: list[dict], prices: PriceProvider, start=None, end=None) -> pd.DataFrame:
     """Daily (business days) value of the account: cash, holdings, total,
-    external flow of the day. Positions are replayed day by day from the
-    movements (incremental, one pass)."""
+    external flow of the day, P&L of the lots bought that day from their
+    trade to the close (`new_pnl`, see TWR). Positions are replayed day by
+    day from the movements (incremental, one pass)."""
     if not movements:
-        return pd.DataFrame(columns=["cash", "holdings", "value", "flow"])
+        return pd.DataFrame(columns=["cash", "holdings", "value", "flow", "new_pnl"])
     mvs = sorted(movements, key=lambda m: (m["ts"], m.get("movement_id") or 0))
     first = pd.Timestamp(start or mvs[0]["ts"])
     last = pd.Timestamp(end or utc_today())
@@ -102,27 +190,35 @@ def valuation_series(movements: list[dict], prices: PriceProvider, start=None, e
         for mv in todays:
             apply_movement(state, mv)
         flow = sum(float(m["amount"]) for m in todays if m["kind"] in EXTERNAL_FLOW_KINDS)
+        new_pnl = sum(float(m["quantity"]) * _unit_value(state.positions[m["symbol"]], series_of(m["symbol"]), day)
+                      + float(m["amount"]) for m in todays if m["kind"] == "buy")
         holdings = 0.0
         for sym, pos in state.positions.items():
             if pos.quantity <= 1e-9:
                 continue
             if pos.is_term_deposit:
                 holdings += term_deposit_value(pos.cost, pos.rate or 0.0, pos.start, pos.maturity, day)
-                continue
-            px = _price_at(series_of(sym), day)
-            holdings += pos.quantity * (px if px is not None else (pos.last_trade_price or 0.0))
-        rows.append((day, state.cash, holdings, state.cash + holdings, flow))
-    return pd.DataFrame(rows, columns=["date", "cash", "holdings", "value", "flow"]).set_index("date")
+            else:
+                holdings += pos.quantity * _unit_value(pos, series_of(sym), day)
+        rows.append((day, state.cash, holdings, state.cash + holdings, flow, new_pnl))
+    return pd.DataFrame(rows, columns=["date", "cash", "holdings", "value", "flow", "new_pnl"]).set_index("date")
 
 
 def time_weighted_returns(val: pd.DataFrame) -> pd.Series:
-    """Daily TWR returns, end-of-day flows; days whose starting capital
+    """Daily TWR returns, end-of-day flows, the day's new lots' P&L on the
+    capital after the flows (module docstring); days whose starting capital
     V_{t-1} is not positive are skipped (no return on zero capital)."""
     v = val["value"].to_numpy(float)
     f = val["flow"].to_numpy(float)
+    p = val["new_pnl"].to_numpy(float) if "new_pnl" in val else np.zeros(len(v))
     out = np.full(len(v), np.nan)
     for t in range(1, len(v)):
-        if v[t - 1] > 1e-9:
+        if v[t - 1] <= 1e-9:
+            continue
+        old = v[t] - f[t] - p[t]
+        if abs(p[t]) > 1e-9 and old + f[t] > 1e-9:
+            out[t] = old / v[t - 1] * v[t] / (old + f[t]) - 1.0
+        else:
             out[t] = (v[t] - f[t]) / v[t - 1] - 1.0
     return pd.Series(out, index=val.index).dropna()
 
@@ -218,24 +314,22 @@ def performance_summary(movements: list[dict], prices: PriceProvider, benchmark:
 
 def holdings_table(movements: list[dict], prices: PriceProvider, as_of=None, account: dict | None = None) -> dict:
     """Current positions with PRU, last price (and its source), value,
-    weight, latent P&L; plus cash, total and the ledger's warnings."""
+    weight, latent P&L (bonds: coupon, maturity, accrued interest, yield);
+    plus cash, total and the ledger's warnings."""
     day = pd.Timestamp(as_of or utc_today())
     state = replay(movements, as_of=day, account=account)
     rows = []
     for sym, pos in sorted(state.positions.items()):
-        if pos.is_term_deposit:
-            value = term_deposit_value(pos.cost, pos.rate or 0.0, pos.start, pos.maturity, day)
-            price, source = value, f"DAT {pos.rate:.2%} → {pos.maturity}"
-        else:
-            px = _price_at(prices(sym), day)
-            price, source = (px, "cotation") if px is not None else (pos.last_trade_price, "prix de transaction")
-            value = pos.quantity * (price or 0.0)
-        rows.append({"symbol": sym, "quantity": pos.quantity, "pru": pos.pru, "price": price,
-                     "price_source": source, "value": value, "cost": pos.cost,
+        v = position_value(pos, None if pos.is_term_deposit else prices(sym), day)
+        value = v["value"]
+        rows.append({"symbol": sym, "quantity": pos.quantity, "pru": pos.pru, "price": v["price"],
+                     "price_source": v["source"], "value": value, "cost": pos.cost,
                      "latent_pnl": value - pos.cost,
                      "latent_pnl_pct": (value - pos.cost) / pos.cost if pos.cost > 0 else None,
                      "realized_pnl": pos.realized,
-                     "is_term_deposit": pos.is_term_deposit})
+                     "is_term_deposit": pos.is_term_deposit, "is_bond": pos.is_bond,
+                     "rate": pos.rate if pos.is_bond else None, "maturity": pos.maturity if pos.is_bond else None,
+                     "accrued": v["accrued"], "ytm": v["ytm"]})
     total = state.cash + sum(r["value"] for r in rows)
     for r in rows:
         r["weight"] = r["value"] / total if total else None
