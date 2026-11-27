@@ -26,10 +26,11 @@ def _median(values) -> float | None:
     return vals[mid] if len(vals) % 2 else (vals[mid - 1] + vals[mid]) / 2
 
 
-def panel_median(runs) -> dict[str, float | None]:
-    """Médiane de chaque mesure du panneau (ADR 0023) sur les plis de test des runs donnés, chaque mesure sur les runs qui l'ont."""
+def panel_median(runs, attr: str = "panel", keys: tuple[str, ...] = metric_panel.PANEL_KEYS) -> dict[str, float | None]:
+    """Médiane de chaque mesure du panneau (ADR 0023) sur les plis de test des runs donnés, chaque mesure sur les runs qui l'ont.
+    `attr` / `keys` : `value_panel` / `VALUE_PANEL_KEYS` pour le panneau de la valeur exacte (ADR 0032)."""
     runs = list(runs)
-    return {key: _median((r.get("panel") or {}).get(key) for r in runs) for key in metric_panel.PANEL_KEYS}
+    return {key: _median((r.get(attr) or {}).get(key) for r in runs) for key in keys}
 
 
 def recent_failures(failures: list[dict]) -> list[dict]:
@@ -66,11 +67,14 @@ def home_summary(conn: sqlite3.Connection, groups: dict[str, list[tuple[str, str
     runs = trackdb.list_all_runs(conn, with_balance=False)          # ni la page ni les classes n'affichent la répartition haut / bas
     done = [r for r in runs if r["status"] == "done"]
     sane = [r for r in done if not r.get("suspect")]
-    kinds = {"directional": {"n": 0, "panel": {}}, "alpha": {"n": 0, "panel": {}}}
+    # Trois genres de modèles (`run_queries.list_run_index`) : la valeur exacte (`__val`, ADR 0029) faisait planter ce résumé (KeyError) dès
+    # le premier run de valeur terminé -- l'instantané de l'accueil ne se rafraîchissait plus (constat du 2026-11-27).
+    kinds = {"directional": {"n": 0, "panel": {}}, "alpha": {"n": 0, "panel": {}}, "value": {"n": 0, "panel": {}, "value_panel": {}}}
     for r in sane:
-        kinds[r["kind"]]["n"] += 1
+        kinds.setdefault(r["kind"], {"n": 0, "panel": {}})["n"] += 1
     for kind, k in kinds.items():
         k["panel"] = panel_median(r for r in sane if r["kind"] == kind)
+    kinds["value"]["value_panel"] = panel_median((r for r in sane if r["kind"] == "value"), "value_panel", metric_panel.VALUE_PANEL_KEYS)
 
     failures = data_health.failures(conn)
     recent = recent_failures(failures)

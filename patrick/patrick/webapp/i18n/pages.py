@@ -359,8 +359,63 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
     "rp_value_ic": _s("IC (test)", "IC (test)"),
     "rp_value_ic_holdout": _s("IC (contrôle final)", "IC (final control)"),
     "rp_value_r2_holdout": _s("R² hors échantillon (contrôle final)", "Out-of-sample R² (final control)"),
-    "kind_value_hint": _s("Modèles qui prédisent le rendement lui-même (régression) : IC, R² hors échantillon et erreur moyenne en plus des mesures de direction ; leurs champions sont à part.",
-                          "Models that predict the return itself (regression): IC, out-of-sample R² and mean error on top of direction measures; their champions are separate."),
+    "kind_value_hint": _s("Modèles qui prédisent le rendement lui-même (régression), lus sur leur propre panneau : IC (ordre des rendements), "
+                          "R² hors échantillon (amplitude contre « rendement nul »), bon signe et couverture de l'intervalle à 80 % ; leurs champions sont à part.",
+                          "Models that predict the return itself (regression), read on their own panel: IC (ranking of returns), out-of-sample R² "
+                          "(magnitude against 'zero return'), right sign and coverage of the 80% interval; their champions are separate."),
+    # Panneau de la valeur exacte (ADR 0032, `validation/metric_panel.py::VALUE_PANEL`) et mesures secondaires
+    "pm_IC": _s("IC", "IC"),
+    "pm_R2_oos": _s("R² h.é.", "OOS R²"),
+    "pm_Hit_sign": _s("Bon signe", "Right sign"),
+    "pm_Cov80": _s("Couv. 80 %", "80% cov."),
+    "pm_MAE_skill": _s("Gain d'erreur", "Error skill"),
+    "pm_MZ_slope": _s("Pente", "Slope"),
+    "pm_Gain_sign": _s("Gain / position", "Gain / position"),
+    "pm_MAE": _s("Erreur moy.", "Mean error"),
+    "pm_RMSE": _s("RMSE", "RMSE"),
+    "metric_IC": _s("Coefficient d'information : corrélation de rang entre rendement prévu et rendement réalisé. Le modèle ordonne-t-il bien "
+                    "les jours ? 0 = hasard ; 0,05 est déjà utile en finance. Première mesure du duel de la valeur exacte.",
+                    "Information coefficient: rank correlation between forecast and realised return. Does the model order the days well? "
+                    "0 = chance; 0.05 is already useful in finance. First measure of the exact-value duel."),
+    "metric_R2_oos": _s("R² hors échantillon : part de l'erreur quadratique gagnée sur la prévision « rendement nul » (Campbell et Thompson). "
+                        "> 0 : ses amplitudes valent mieux que ne rien prédire ; < 0 : il se trompe plus fort. Seconde mesure du duel.",
+                        "Out-of-sample R²: share of the squared error gained over the 'zero return' forecast (Campbell and Thompson). > 0: its "
+                        "magnitudes beat predicting nothing; < 0: it errs harder. Second measure of the duel."),
+    "metric_Hit_sign": _s("Bon signe : part des jours où le signe du rendement prévu était celui du rendement réalisé. 50 % = hasard.",
+                          "Right sign: share of days where the sign of the forecast return was that of the realised return. 50% = chance."),
+    "metric_Cov80": _s("Couverture de l'intervalle à 80 % : part des rendements réalisés tombés dans l'intervalle de prévision (erreurs hors "
+                       "échantillon). Cible 80 % : en dessous, le modèle se croit plus précis qu'il n'est (ses probabilités de classe aussi).",
+                       "Coverage of the 80% interval: share of realised returns inside the forecast interval (out-of-sample errors). Target 80%: "
+                       "below, the model believes it is more precise than it is (so are its class probabilities)."),
+    "metric_MAE_skill": _s("Gain d'erreur absolue sur « rendement nul » : 1 − MAE du modèle / MAE de zéro. Même lecture que le R², sans "
+                           "laisser un jour extrême décider.",
+                           "Absolute-error skill over 'zero return': 1 − model MAE / zero MAE. Same reading as R², without letting one "
+                           "extreme day decide."),
+    "metric_MZ_slope": _s("Pente de calibration de l'amplitude (réalisé sur prévu, Mincer-Zarnowitz) : 1 = amplitudes justes ; entre 0 et 1 = "
+                          "prévisions trop amples ; au plus 0 = aucune information sur l'amplitude.",
+                          "Magnitude calibration slope (realised on forecast, Mincer-Zarnowitz): 1 = right magnitudes; between 0 and 1 = "
+                          "forecasts too wide; at most 0 = no information on magnitude."),
+    "metric_Gain_sign": _s("Rendement moyen capté par position en suivant le signe de la prévision (achat si hausse prévue, vente sinon), "
+                           "avant frais : à comparer au coût d'un aller-retour.",
+                           "Mean return captured per position by following the sign of the forecast (buy if a rise is forecast, sell "
+                           "otherwise), before fees: compare with the cost of a round trip."),
+    "metric_MAE": _s("Erreur absolue moyenne, en points de rendement sur l'horizon.", "Mean absolute error, in return points over the horizon."),
+    "metric_RMSE": _s("Racine de l'erreur quadratique moyenne, en points de rendement sur l'horizon.",
+                      "Root mean squared error, in return points over the horizon."),
+    "rd_holdout_ic": _s("Contrôle final · IC", "Final control · IC"),
+    "rd_holdout_value_rel": _s("R² h.é. {r} · bon signe {h} · couverture 80 % {c} — essai gagnant, jamais vu pendant la sélection.",
+                               "OOS R² {r} · right sign {h} · 80% coverage {c} — winning trial, never seen during selection."),
+    "rd_hv_icwin": _s("IC (fenêtre)", "IC (window)"),
+    "rd_hv_icfull": _s("IC (toute la période)", "IC (full period)"),
+    "rd_hv_r2full": _s("R² h.é. (toute la période)", "OOS R² (full period)"),
+    "rd_hv_icho": _s("IC holdout (diag.)", "Holdout IC (diag.)"),
+    "rd_hv_r2ho": _s("R² holdout (diag.)", "Holdout R² (diag.)"),
+    "rd_hv_panelfinal": _s("Modèle final · IC · R² · couverture", "Final model · IC · R² · coverage"),
+    "rd_hv_foot": _s("Valeur exacte : la configuration de chaque horizon est choisie sur son critère (IC, ou R² hors échantillon). Le "
+                     "holdout (derniers mois, jamais vus pour choisir) est mesuré avant Optuna pour chaque horizon, puis pour le modèle final.",
+                     "Exact value: each horizon's configuration is chosen on its criterion (IC, or out-of-sample R²). The holdout (latest "
+                     "months, never seen for choosing) is measured before Optuna for each horizon, then for the final model."),
+    "rp_holdout_short": _s("contrôle final", "final control"),
     "hist_ranking_best": _s("MEILLEURS MODÈLES", "BEST MODELS"),
     "hist_ranking_worst": _s("PIRES MODÈLES", "WORST MODELS"),
     "hist_ranking_rel": _s("ML et DL : {m} du meilleur essai ; RL : Sharpe hors échantillon", "ML and DL: {m} of the best trial; RL: out-of-sample Sharpe"),

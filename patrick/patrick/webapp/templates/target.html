@@ -165,7 +165,7 @@
     ('CPCV' if r.scheme == 'cpcv' else 'walk-forward'),
     status_badge(r.status, state),
     rel_time(r.started_at),
-    r.n_trials if r.n_trials is not none else '<span class="na">—</span>'] + panel_cells(r.panel) + [
+    r.n_trials if r.n_trials is not none else '<span class="na">—</span>'] + (panel_cells(r.value_panel, VALUE_PANEL_KEYS) if detail.kind == 'value' else panel_cells(r.panel)) + [
     mcc_gap(r.panel, r.benchmark_mcc),
     dm_cell,
     up_down(r.class_balance.test if r.class_balance else none, 'true'),
@@ -174,7 +174,7 @@
     relaunch_cell,
 ]) %}
 {% endfor %}
-{{ data_table([t('col_run'), t('col_horizon'), t('col_scheme'), t('col_status'), t('tg_col_started'), t('col_trials')] + panel_heads(m_labels) + [t('hist_gap_mcc'), t('col_dm_p'), t('cb_col_true'), t('cb_col_pred'), t('ra_col_analysis'), t('tg_col_relaunch')],
+{{ data_table([t('col_run'), t('col_horizon'), t('col_scheme'), t('col_status'), t('tg_col_started'), t('col_trials')] + panel_heads(m_labels, panel_keys_for(detail.kind)) + [t('hist_gap_mcc'), t('col_dm_p'), t('cb_col_true'), t('cb_col_pred'), t('ra_col_analysis'), t('tg_col_relaunch')],
               rows, num_cols=[1, 5, 6, 7, 8, 9, 10, 11, 12, 13],
               footer=t('tg_runs_foot', n=detail.runs | length)) }}
 </section>

@@ -1,9 +1,10 @@
 {# Fragment des lots (`/fragments/launch-batches?family=ml|dl|rl`) : `by_class` = [{key, symbols, never}] (une carte par classe d'actifs), `missing` = {cible: [horizons sans run]}.
-   Les cartes ressemblent à celles des profils ; le clic est géré par `static/launch_batches.js`. #}
+   Les cartes ressemblent à celles des profils ; le clic est géré par `static/launch_batches.js`. `data-task` dit l'objectif que la carte prépare :
+   le formulaire bascule sur la direction ou la valeur exacte (ADR 0032). `value` (ML et DL) : les mêmes lots comptés pour la valeur exacte. #}
 <div class="profile-grid batch-grid">
     {% for c in by_class %}
     <div class="profile-card batch-card" data-help-host>
-        <button type="button" class="profile-main batch-main" data-batch="class" data-symbols='{{ c.symbols | tojson }}'>
+        <button type="button" class="profile-main batch-main" data-batch="class" data-task="direction" data-symbols='{{ c.symbols | tojson }}'>
             <span class="profile-name">{{ t('mkt_' ~ c.key) }}</span>
         </button>
         <span class="profile-desc">{{ t('batch_class_desc') }}</span>
@@ -12,7 +13,7 @@
     {% endfor %}
     {% if top_signal %}
     <div class="profile-card batch-card" data-help-host>
-        <button type="button" class="profile-main batch-main" data-batch="class" data-symbols='{{ top_signal | tojson }}'>
+        <button type="button" class="profile-main batch-main" data-batch="class" data-task="direction" data-symbols='{{ top_signal | tojson }}'>
             <span class="profile-name">{{ t('batch_top_name') }}</span>
         </button>
         <span class="profile-desc">{{ t('batch_top_desc') }}</span>
@@ -21,7 +22,7 @@
     {% endif %}
     {% if family != 'rl' %}
     <div class="profile-card batch-card{% if not missing %} is-empty{% endif %}" data-help-host>
-        <button type="button" class="profile-main batch-main" data-batch="missing" data-gaps='{{ missing | tojson }}'{% if not missing %} disabled{% endif %}>
+        <button type="button" class="profile-main batch-main" data-batch="missing" data-task="direction" data-gaps='{{ missing | tojson }}'{% if not missing %} disabled{% endif %}>
             <span class="profile-name">{{ t('batch_missing_name') }}</span>
         </button>
         <span class="profile-desc">{{ t('batch_missing_desc') }}</span>
@@ -38,3 +39,42 @@
     </div>
     {% endif %}
 </div>
+{% if value %}
+<h4 class="batch-subtitle">{{ t('batch_value_title') }} <span class="hint">{{ t('batch_value_sub') }}</span></h4>
+<div class="profile-grid batch-grid batch-grid-value">
+    {% if value.signal %}
+    <div class="profile-card batch-card" data-help-host>
+        <button type="button" class="profile-main batch-main" data-batch="class" data-task="value" data-symbols='{{ value.signal | tojson }}'>
+            <span class="profile-name">{{ t('batch_value_signal_name') }}</span>
+        </button>
+        <span class="profile-desc">{{ t('batch_value_signal_desc') }}</span>
+        <span class="profile-meta"><span class="batch-count pk-mono">{{ t('batch_top_meta', n=value.signal | length) }}</span></span>
+    </div>
+    {% endif %}
+    {% if value.cross %}
+    <div class="profile-card batch-card" data-help-host>
+        <button type="button" class="profile-main batch-main" data-batch="class" data-task="value" data-symbols='{{ value.cross | tojson }}'>
+            <span class="profile-name">{{ t('batch_value_cross_name_' ~ family) }}</span>
+        </button>
+        <span class="profile-desc">{{ t('batch_value_cross_desc_' ~ family) }}</span>
+        <span class="profile-meta"><span class="batch-count pk-mono">{{ t('batch_top_meta', n=value.cross | length) }}</span></span>
+    </div>
+    {% endif %}
+    <div class="profile-card batch-card{% if not value.missing %} is-empty{% endif %}" data-help-host>
+        <button type="button" class="profile-main batch-main" data-batch="missing" data-task="value" data-gaps='{{ value.missing | tojson }}'{% if not value.missing %} disabled{% endif %}>
+            <span class="profile-name">{{ t('batch_value_missing_name') }}</span>
+        </button>
+        <span class="profile-desc">{{ t('batch_value_missing_desc') }}</span>
+        <span class="profile-meta"><span class="batch-count pk-mono">{{ t('batch_n_pairs', pairs=value.n_missing_pairs, n=value.missing | length) if value.missing else t('batch_nothing') }}</span></span>
+    </div>
+    {% for c in value.by_class %}
+    <div class="profile-card batch-card" data-help-host>
+        <button type="button" class="profile-main batch-main" data-batch="class" data-task="value" data-symbols='{{ c.symbols | tojson }}'>
+            <span class="profile-name">{{ t('mkt_' ~ c.key) }}</span>
+        </button>
+        <span class="profile-desc">{{ t('batch_value_class_desc') }}</span>
+        <span class="profile-meta"><span class="batch-count pk-mono">{{ t('batch_value_class_count', n=c.symbols | length, never=c.never) }}</span></span>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

@@ -13,6 +13,18 @@ modèles comme les autres, et leurs mesures de direction (AUC, Brier) restent co
   aléatoire ; Campbell et Thompson, 2008) ;
 - `MAE`, `RMSE` (en points de rendement) et `Hit_sign` (part des signes justes, lignes nulles exclues).
 
+Mesures ajoutées le 2026-11-27 (ADR 0032), pour lire un modèle de valeur comme on lit un modèle de direction (panneau à quatre mesures,
+`validation/metric_panel.py::VALUE_PANEL`) :
+- `Cov80` : part des rendements réalisés tombés dans l'intervalle de prévision à 80 % (prévision + quantiles 10 % / 90 % des erreurs hors
+  échantillon). C'est la fiabilité de l'incertitude du modèle, l'équivalent du Brier : les probabilités de classe que lisent les fonds viennent
+  de ces mêmes erreurs. 0,80 = juste ; en dessous, le modèle se croit plus précis qu'il n'est ;
+- `MAE_skill` : 1 − MAE / MAE de « rendement nul ». Même lecture que le R² hors échantillon, sur l'erreur absolue (les régresseurs sont ajustés
+  avec une perte de Huber : un seul jour extrême ne doit pas décider) ;
+- `MZ_slope` : pente de la régression du réalisé sur le prévu (Mincer et Zarnowitz, 1969). 1 = amplitudes justes ; entre 0 et 1 = prévisions
+  trop amples (à rétrécir) ; au plus 0 = aucune information sur l'amplitude ;
+- `Gain_sign` : rendement moyen capté en suivant le signe de la prévision (acheter si r̂ > 0, vendre sinon), avant frais, en rendement sur
+  l'horizon : ce qu'un fonds gagnerait par position, à comparer à ses frais d'aller-retour.
+
 Le rééchantillonnage (SMOTE...) et l'empilement n'existent pas pour cet objectif (`RunConfig._check_value_task`) ; la sélection de
 variables et la découverte d'interactions restent celles du run (sur les classes de direction) : documenté comme une simplification.
 """
@@ -29,7 +41,8 @@ CLASSES = np.array([0, 1, 2, 3])
 RESIDUAL_FRAC = 0.25          # part de l'entraînement (la fin) qui mesure les erreurs hors échantillon
 MAX_RESIDUALS = 2000          # au-delà, les plus récentes (mémoire n x m de `predict_proba`)
 PSEUDO_COUNT = 0.5            # lissage : aucune classe à probabilité exactement nulle (log-loss, Brier)
-VALUE_METRICS = ("IC", "R2_oos", "MAE", "RMSE", "Hit_sign")
+VALUE_METRICS = ("IC", "R2_oos", "MAE", "RMSE", "Hit_sign", "Cov80", "MAE_skill", "MZ_slope", "Gain_sign")
+INTERVAL_COVERAGE = 0.80      # intervalle de prévision dont `Cov80` mesure la couverture réelle
 
 _DROP_FOR_REGRESSION = ("sampler", "gap", "class_weight", "auto_class_weights", "eval_metric", "objective", "loss_function", "stack")
 
@@ -174,8 +187,10 @@ class ValueModel(BaseEstimator):
         return r_hat, r_hat + lo, r_hat + hi
 
 
-def value_metrics(r_true, r_hat) -> dict:
-    """Mesures propres à la valeur exacte (voir le module) ; `None` quand elles ne se calculent pas (trop peu de lignes, constantes)."""
+def value_metrics(r_true, r_hat, residuals=None) -> dict:
+    """Mesures propres à la valeur exacte (voir le module) ; `None` quand elles ne se calculent pas (trop peu de lignes, constantes).
+    `residuals` : erreurs hors échantillon du modèle (`ValueModel.residuals_`), qui bornent son intervalle de prévision ; sans elles,
+    `Cov80` reste absente."""
     r_true = np.asarray(r_true, dtype=float).ravel()
     r_hat = np.asarray(r_hat, dtype=float).ravel()
     ok = np.isfinite(r_true) & np.isfinite(r_hat)
@@ -188,9 +203,19 @@ def value_metrics(r_true, r_hat) -> dict:
     out["RMSE"] = float(np.sqrt(np.mean(err ** 2)))
     denom = float(np.sum(r_true ** 2))
     out["R2_oos"] = float(1 - np.sum(err ** 2) / denom) if denom > 0 else None
+    mae_zero = float(np.mean(np.abs(r_true)))
+    out["MAE_skill"] = float(1 - out["MAE"] / mae_zero) if mae_zero > 0 else None
     if np.std(r_hat) > 0 and np.std(r_true) > 0:
         ic = spearmanr(r_hat, r_true).statistic
         out["IC"] = float(ic) if np.isfinite(ic) else None
+        out["MZ_slope"] = float(np.cov(r_hat, r_true, ddof=0)[0, 1] / np.var(r_hat))
     nz = (r_true != 0) & (r_hat != 0)
     out["Hit_sign"] = float(np.mean(np.sign(r_true[nz]) == np.sign(r_hat[nz]))) if nz.any() else None
+    out["Gain_sign"] = float(np.mean(np.sign(r_hat) * r_true))
+    res = np.asarray(residuals if residuals is not None else [], dtype=float).ravel()
+    res = res[np.isfinite(res)]
+    if len(res) >= 10:
+        a = (1 - INTERVAL_COVERAGE) / 2
+        lo, hi = np.quantile(res, [a, 1 - a])
+        out["Cov80"] = float(np.mean((err >= lo) & (err <= hi)))
     return out

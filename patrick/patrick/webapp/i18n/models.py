@@ -361,6 +361,32 @@ MODELS_STRINGS: dict[str, dict[str, str]] = {
     "batch_n_pairs": _s("{pairs} couple(s) cible × horizon · {n} cible(s)", "{pairs} target × horizon pair(s) · {n} target(s)"),
     "batch_rec_meta": _s("Analyse à la demande", "Analysed on demand"),
     "batch_nothing": _s("Rien à lancer", "Nothing to launch"),
+    # Lots de la valeur exacte (ADR 0032) : mêmes mécaniques, comptés pour cet objectif ; un clic bascule le formulaire sur « valeur exacte ».
+    "batch_value_title": _s("Valeur exacte", "Exact value"),
+    "batch_value_sub": _s("modèles qui prédisent le rendement lui-même ; un clic bascule l'objectif du formulaire",
+                          "models that predict the return itself; one click switches the form's objective"),
+    "batch_value_signal_name": _s("Là où la direction a un signal", "Where direction has a signal"),
+    "batch_value_signal_desc": _s("Les cibles dont la direction se prévoit déjà (signal regroupé, paires significatives d'abord) et qui n'ont encore "
+                                  "aucun modèle de valeur exacte : prédire l'amplitude n'a de chance que là.",
+                                  "Targets whose direction is already predictable (pooled signal, significant pairs first) and that have no "
+                                  "exact-value model yet: forecasting the magnitude only stands a chance there."),
+    "batch_value_cross_name_ml": _s("Déjà en réseaux, jamais en arbres", "Already as networks, never as trees"),
+    "batch_value_cross_desc_ml": _s("Cibles modélisées en valeur exacte par des réseaux (page DL) mais jamais par des arbres : les deux familles "
+                                    "concourent pour le même champion.",
+                                    "Targets modelled for exact value by networks (DL page) but never by trees: both families compete for the "
+                                    "same champion."),
+    "batch_value_cross_name_dl": _s("Déjà en arbres, jamais en réseaux", "Already as trees, never as networks"),
+    "batch_value_cross_desc_dl": _s("Cibles modélisées en valeur exacte par des arbres (page ML) mais jamais par des réseaux : les deux familles "
+                                    "concourent pour le même champion.",
+                                    "Targets modelled for exact value by trees (ML page) but never by networks: both families compete for the "
+                                    "same champion."),
+    "batch_value_missing_name": _s("Horizons jamais lancés (valeur exacte)", "Never-run horizons (exact value)"),
+    "batch_value_missing_desc": _s("Pour les cibles qui ont déjà un modèle de valeur exacte dans cette famille, les horizons par défaut sans run.",
+                                   "For targets that already have an exact-value model in this family, the default horizons with no run."),
+    "batch_value_class_desc": _s("Toutes les cibles de la classe, en valeur exacte.", "Every target of the class, as exact value."),
+    "batch_value_class_count": _s("{n} cible(s) · {never} sans valeur exacte", "{n} target(s) · {never} without exact value"),
+    "batch_js_task_value": _s("Objectif du formulaire : valeur exacte.", "Form objective: exact value."),
+    "batch_js_task_direction": _s("Objectif du formulaire : direction.", "Form objective: direction."),
     "batch_js_selected": _s("{n} cible(s) sélectionnée(s) : vérifie les réglages puis lance.",
                             "{n} target(s) selected: check the settings, then launch."),
     "batch_js_selected_missing": _s("{n} cible(s), horizons {h} : seuls les couples jamais lancés seront créés.",

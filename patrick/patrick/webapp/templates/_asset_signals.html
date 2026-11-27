@@ -27,7 +27,7 @@
         <td class="num pk-mono">{% if c and c.dm_p_value is not none %}{{ '%.3f' | format(c.dm_p_value) }}{% else %}<span class="na">—</span>{% endif %}</td>
         {% if values %}{% set v = values.get(h) %}
         <td class="num pk-mono">{% if v and v.y_value is not none %}<a href="/runs/{{ v.run_id }}/detail" class="{{ 'pos' if v.y_value > 0 else 'neg' }}">{{ '%+.2f' | format(v.y_value * 100) }} %</a>
-            <span class="hint">{{ t('as_value_line', algo=v.algo or '—', ic=('%.2f' | format(v.ic)) if v.ic is not none else '—') }}</span>
+            <span class="hint" title="{% for key in VALUE_PANEL_KEYS %}{{ t('pm_' ~ key) }} {{ (v.panel or {}).get(key) | pmfmt(key) }}{% if not loop.last %} · {% endif %}{% endfor %}">{{ t('as_value_line', algo=v.algo or '—', ic=('%.2f' | format(v.ic)) if v.ic is not none else '—') }}{% if v.panel and v.panel.R2_oos is not none %} · {{ t('pm_R2_oos') }} {{ v.panel.R2_oos | pmfmt('R2_oos') }}{% endif %}</span>
             {% elif v %}<a href="/runs/{{ v.run_id }}/detail" class="hint">{{ t('as_value_pending') }}</a>{% else %}<span class="na">—</span>{% endif %}</td>
         {% endif %}
     </tr>

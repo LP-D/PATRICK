@@ -37,7 +37,7 @@
 {% set sz = detail.sizes or {} %}
 {% set size_notes = {'test': t('rd_sizes_test', n=sz.test.n, neff=sz.test.n_eff, k=sz.test.folds) if sz.test else '',
                      'holdout': t('rd_sizes_holdout', n=sz.holdout.n, neff=sz.holdout.n_eff) if sz.holdout else ''} %}
-{{ headline_metrics(detail.headline, m_labels, size_notes) }}
+{{ headline_metrics(detail.headline, m_labels, size_notes, panel_keys_for(detail.kind)) }}
 
 {# Ce ne sont pas des onglets : les trois cibles sont des sections de CETTE
    page, toutes rendues, toutes déjà là. Les styler en onglets (soulignement
@@ -104,6 +104,9 @@
 
 {% if detail.is_cpcv %}
 {{ metric(t('rd_holdout'), t('rd_not_computed'), t('rd_holdout_cpcv'), "disabled") }}
+{% elif detail.kind == 'value' and detail.headline and detail.headline.holdout and detail.headline.holdout.get('IC') is not none %}
+{% set ho = detail.headline.holdout %}
+{{ metric(t('rd_holdout_ic'), ho.IC | pmfmt('IC'), t('rd_holdout_value_rel', r=ho.get('R2_oos') | pmfmt('R2_oos'), h=ho.get('Hit_sign') | pmfmt('Hit_sign'), c=ho.get('Cov80') | pmfmt('Cov80')), "ok" if (ho.IC or 0) > 0 else "warning") }}
 {% elif detail.headline and detail.headline.holdout and detail.headline.holdout.get('AUC_dir') is not none %}
 {% set ho = detail.headline.holdout %}
 {{ metric(t('rd_holdout_auc'), ho.AUC_dir | pmfmt('AUC_dir'), t('rd_holdout_panel_rel', b=ho.get('Brier_up') | pmfmt('Brier_up'), m=ho.get('MCC_4cls') | pmfmt('MCC_4cls'), a=ho.get('Acc_dir_p') | pmfmt('Acc_dir_p')), "ok") }}
@@ -224,31 +227,46 @@
 <p>{{ t('rd_kpi_target') }} <strong title="{{ kpi.target }}">{{ kpi.target | iname }}</strong> · {{ t('rd_kpi_horizons') }} {{ kpi.horizons | join(', ') }} · {{ t('rd_kpi_cands', n=kpi.n_candidates) }}
 {{ t.tx(kpi.window.note) }} {{ t('rd_kpi_def') }}</p>
 
+{% set pk = panel_keys_for(kpi.kind) %}
 <h3>{{ t('rd_by_algo') }}</h3>
 {% set algo_rows = [] %}
 {% for r in kpi.by_algo %}
-{% set _ = algo_rows.append([r.rank, r.algo | algo_tag, r.n] + panel_cells(r)) %}
+{% set _ = algo_rows.append([r.rank, r.algo | algo_tag, r.n] + panel_cells(r, pk)) %}
 {% endfor %}
-{{ data_table([t('rd_c_rank'), t('rd_c_algo'), t('rd_c_cand')] + panel_heads(m_labels), algo_rows, num_cols=[0, 2, 3, 4, 5, 6]) }}
+{{ data_table([t('rd_c_rank'), t('rd_c_algo'), t('rd_c_cand')] + panel_heads(m_labels, pk), algo_rows, num_cols=[0, 2, 3, 4, 5, 6]) }}
 
 <h3>{{ t('rd_by_n') }}</h3>
 {% set n_rows = [] %}
 {% for r in kpi.by_n_features %}
-{% set _ = n_rows.append([r.rank, r.n_features, r.n] + panel_cells(r)) %}
+{% set _ = n_rows.append([r.rank, r.n_features, r.n] + panel_cells(r, pk)) %}
 {% endfor %}
-{{ data_table([t('rd_c_rank'), t('rd_c_vars'), t('rd_c_cand')] + panel_heads(m_labels), n_rows, num_cols=[0, 1, 2, 3, 4, 5, 6]) }}
+{{ data_table([t('rd_c_rank'), t('rd_c_vars'), t('rd_c_cand')] + panel_heads(m_labels, pk), n_rows, num_cols=[0, 1, 2, 3, 4, 5, 6]) }}
 
 <h3>{{ t('rd_rank_h') }}</h3>
 {% set rank_rows = [] %}
 {% for r in kpi.ranking[:15] %}
-{% set _ = rank_rows.append([r.rank, r.algo | algo_tag, r.n_features, r.sampler, r.n_horizons] + panel_cells(r)) %}
+{% set _ = rank_rows.append([r.rank, r.algo | algo_tag, r.n_features, r.sampler, r.n_horizons] + panel_cells(r, pk)) %}
 {% endfor %}
-{{ data_table([t('rd_c_rank'), t('rd_c_algo'), t('rd_c_vars'), "Sampler", t('rd_kpi_horizons2')] + panel_heads(m_labels), rank_rows,
+{{ data_table([t('rd_c_rank'), t('rd_c_algo'), t('rd_c_vars'), "Sampler", t('rd_kpi_horizons2')] + panel_heads(m_labels, pk), rank_rows,
               num_cols=[0, 2, 4, 5, 6, 7, 8], collapse_after=5, more_label=t('rows_more'), less_label=t('rows_less'),
               footer=(t('rd_top15', n=kpi.ranking | length) if kpi.ranking | length > 15 else none)) }}
 
 <h3>{{ t('rd_by_h') }}</h3>
 {% set h_rows = [] %}
+{% if kpi.kind == 'value' %}
+{# Valeur exacte : la même lecture (fenêtre de comparaison, toute la période, diagnostic, contrôle final) sur l'IC et le R² hors échantillon. #}
+{% for r in kpi.by_horizon %}
+{% set _ = h_rows.append([r.horizon, r.algo ~ ' · N=' ~ r.n_features, r.window_value_panel.IC | pmfmt('IC'),
+    (r.full_value_panel.IC | pmfmt('IC')) ~ ' (' ~ r.full_folds ~ ' ' ~ t('rd_fold_word') ~ ('s' if r.full_folds > 1 else '') ~ ')', r.full_value_panel.R2_oos | pmfmt('R2_oos'),
+    r.diag_value_panel.IC | pmfmt('IC'), r.diag_value_panel.R2_oos | pmfmt('R2_oos'),
+    (r.final_algo ~ ' · N=' ~ r.final_n_features) if r.final_algo else '—',
+    (r.holdout_value_panel.IC | pmfmt('IC')) ~ ' · ' ~ (r.holdout_value_panel.R2_oos | pmfmt('R2_oos')) ~ ' · ' ~ (r.holdout_value_panel.Cov80 | pmfmt('Cov80'))]) %}
+{% endfor %}
+{{ data_table([t('rd_h_hday'), t('rd_h_best'), t('rd_hv_icwin'), t('rd_hv_icfull'), t('rd_hv_r2full'),
+               t('rd_hv_icho'), t('rd_hv_r2ho'), t('rd_h_final'), t('rd_hv_panelfinal')], h_rows,
+              num_cols=[0, 2, 3, 4, 5, 6, 8],
+              footer=t('rd_hv_foot')) }}
+{% else %}
 {% for r in kpi.by_horizon %}
 {% set _ = h_rows.append([r.horizon, r.algo ~ ' · N=' ~ r.n_features, r.window_panel.AUC_dir | pmfmt('AUC_dir'),
     (r.full_panel.AUC_dir | pmfmt('AUC_dir')) ~ ' (' ~ r.full_folds ~ ' ' ~ t('rd_fold_word') ~ ('s' if r.full_folds > 1 else '') ~ ')', r.full_panel.Brier_up | pmfmt('Brier_up'),
@@ -260,6 +278,7 @@
                t('rd_h_aucho'), t('rd_h_brierho'), t('rd_h_final'), t('rd_h_panelfinal')], h_rows,
               num_cols=[0, 2, 3, 4, 5, 6, 8],
               footer=t('rd_h_foot')) }}
+{% endif %}
 </section>
 {% endif %}
 

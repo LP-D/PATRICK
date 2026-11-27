@@ -242,6 +242,11 @@ RL_STRINGS: dict[str, dict[str, str]] = {
     "prof_rl_prudent_name": _s("Validation prudente", "Cautious validation"),
     "prof_rl_prudent_desc": _s("6 plis, entraînement sur fenêtre glissante, 3 000 tirages de bootstrap : plus de périodes de test, incertitude mieux mesurée.",
                                "6 folds, rolling training window, 3,000 bootstrap draws: more test periods, better-measured uncertainty."),
+    "prof_rl_max_name": _s("Max : agent le plus poussé", "Max: most thorough agent"),
+    "prof_rl_max_desc": _s("Toutes les familles de variables (40 retenues), mémoire de 20 jours, réseau 3 × 128, 200 000 pas, 5 agents moyennés, 8 plis, "
+                           "5 000 tirages de bootstrap. Les garde-fous restent (validation, repli sur l'achat-conservation). Plusieurs heures.",
+                           "Every feature family (40 kept), 20-day memory, 3 × 128 network, 200,000 steps, 5 averaged agents, 8 folds, 5,000 "
+                           "bootstrap draws. The safeguards stay (validation, fallback to buy-and-hold). Several hours."),
 }
 
 

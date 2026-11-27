@@ -36,14 +36,16 @@ def demo(tmp_path_factory):
 
 def test_the_demo_database_has_champions_judged_live_results_and_a_pooled_signal(demo):
     path, done, module = demo
-    assert done["runs"] == done["champions"] == len(module.TARGETS) * len(module.HORIZONS) == 30
+    # 30 champions de direction, puis 6 de valeur exacte (`VALUE_TARGETS` x horizons 5 et 10, ADR 0032)
+    assert done["runs"] == done["champions"] == len(module.TARGETS) * len(module.HORIZONS) + 2 * len(module.VALUE_TARGETS) == 36
 
     conn = trackdb.connect(path)
     try:
         board = live_board.board(conn, TODAY)
         assert board["total"]["n"] > 1000 and 0.4 < board["total"]["rate"] < 0.7
         assert {r["key"] for r in board["by_class"]} >= {"equities_us", "equities_europe", "fx", "futures"}
-        assert len(board["consensus"]) == len(module.TARGETS)
+        # un avis par étiquette de champions : les cibles, puis leurs modèles de valeur exacte (`symbole__val`, catégorie à part)
+        assert len(board["consensus"]) == len(module.TARGETS) + len(module.VALUE_TARGETS)
         assert conn.execute("SELECT COUNT(*), SUM(significant) FROM pooled_signal").fetchone()[0] == 30
     finally:
         conn.close()

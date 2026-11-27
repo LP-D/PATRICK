@@ -150,7 +150,7 @@ def test_one_card_per_asset_class_selects_the_whole_class(client, conn):
     _add_run(conn, "p1", "^VIX", 1, "done")
     ml = client.get("/fragments/launch-batches?family=ml").text
     cards = {}
-    for chunk in ml.split('data-batch="class" data-symbols=\'')[1:]:
+    for chunk in ml.split('data-batch="class" data-task="direction" data-symbols=\'')[1:]:
         symbols = json.loads(chunk.split("'")[0])
         label = chunk.split('<span class="profile-name">')[1].split("</span>")[0]
         cards[label] = symbols

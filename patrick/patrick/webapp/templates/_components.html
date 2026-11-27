@@ -116,9 +116,9 @@
 
 {# Le panneau d'un modèle (ADR 0023), toujours dans cet ordre : AUC de direction, Brier, MCC, bonne direction. `headline` vient de
    `tracking/history.py`. Le F1 n'y figure plus : il reste dans le tableau complet des métriques par fold. #}
-{% macro headline_metrics(headline, labels, notes=None) %}
+{% macro headline_metrics(headline, labels, notes=None, keys=None) %}
 <div class="headline-metrics">
-  {% for key in PANEL_KEYS %}
+  {% for key in (keys or PANEL_KEYS) %}
   <div class="headline-metric" title="{{ labels.get('metric_' ~ key, key) }}">
     <span class="headline-name">{{ labels.get('pm_' ~ key, key) }}</span>
     <span class="headline-value pk-mono">{{ (headline.test.get(key) if headline and headline.test else none) | pmfmt(key) }}</span>
@@ -129,11 +129,11 @@
 {% endmacro %}
 
 {# En-têtes et cellules du panneau dans un tableau écrit à la main (`<table>`), quand `data_table` ne convient pas. `p` : `{métrique: valeur}`. #}
-{% macro panel_th(labels, cls='') %}{% for key in PANEL_KEYS %}<th class="num {{ cls }}" title="{{ labels.get('metric_' ~ key, key) }}">{{ labels.get('pm_' ~ key, key) }}</th>{% endfor %}{% endmacro %}
+{% macro panel_th(labels, cls='', keys=None) %}{% for key in (keys or PANEL_KEYS) %}<th class="num {{ cls }}" title="{{ labels.get('metric_' ~ key, key) }}">{{ labels.get('pm_' ~ key, key) }}</th>{% endfor %}{% endmacro %}
 {# Écart du modèle à la persistance (« le prochain mouvement répète le dernier ») en MCC, mêmes folds de test : la référence de
    l'Historique et de la fiche cible depuis que le F1 n'y figure plus (ADR 0023). #}
 {% macro mcc_gap(p, bench) %}{% set mcc = p.get('MCC_4cls') if p else none %}{% if mcc is not none and bench is not none %}<span class="{{ 'pos' if mcc >= bench else 'neg' }}">{{ '%+.3f' | format(mcc - bench) }}</span>{% else %}—{% endif %}{% endmacro %}
-{% macro panel_td(p, cls='') %}{% for key in PANEL_KEYS %}<td class="num pk-mono {{ cls }}">{{ (p.get(key) if p else none) | pmfmt(key) }}</td>{% endfor %}{% endmacro %}
+{% macro panel_td(p, cls='', keys=None) %}{% for key in (keys or PANEL_KEYS) %}<td class="num pk-mono {{ cls }}">{{ (p.get(key) if p else none) | pmfmt(key) }}</td>{% endfor %}{% endmacro %}
 
 {% macro sparkline(values, width=120, height=28, color='var(--accent)') %}
 {% if values and values|length > 1 %}

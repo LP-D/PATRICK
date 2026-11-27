@@ -246,7 +246,9 @@
             <th>{{ t('dq_col_target') }}</th>
             <th>{{ t('dq_col_horizon') }}</th>
             <th>{{ t('dq_col_status') }}</th>
-            {{ panel_th(m_labels, 'headline') }}
+            {# Onglet « Valeur exacte » : le panneau des régresseurs (IC, R² hors échantillon, bon signe, couverture ; ADR 0032). #}
+            {% set hist_pk = VALUE_PANEL_KEYS if filter_kind == 'value' else PANEL_KEYS %}
+            {{ panel_th(m_labels, 'headline', hist_pk) }}
             <th class="num" title="{{ t('hist_gap_mcc_tip') }}">{{ t('hist_gap_mcc') }}</th>
             <th class="num">DM p</th>
             <th class="num" title="{{ t('cb_col_tip') }}">{{ t('cb_col_true') }}</th>
@@ -266,7 +268,7 @@
             <td title="{{ r.target }}">{{ r.target | iclass }}{{ r.target | iname }}</td>
             <td>{{ r.horizon | hlabel }}</td>
             <td>{{ status_badge(shown_status, state) }}</td>
-            {{ panel_td(r.panel, 'headline') }}
+            {{ panel_td(r.value_panel if filter_kind == 'value' else r.panel, 'headline', hist_pk) }}
             <td class="num pk-mono">{{ mcc_gap(r.panel, r.benchmark_mcc) }}</td>
             <td class="num pk-mono">{{ '%.3f' | format(r.dm_p_value) if r.dm_p_value is not none else '—' }}</td>
             <td class="num">{{ up_down(r.class_balance.test if r.class_balance else none, 'true') }}</td>

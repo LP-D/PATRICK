@@ -14,13 +14,17 @@
 </header>
 {% if r.partial %}<p class="banner banner-warning rp-banner" role="note">{{ t('rp_partial_banner') }}</p>{% endif %}
 {% if r.suspect %}<p class="banner banner-error rp-banner">{{ t('suspect_banner_title') }} {{ t('suspect_banner_body', reason=r.suspect) }}</p>{% endif %}
-{{ headline_metrics(headline, m_labels) }}
+{{ headline_metrics(headline, m_labels, keys=panel_keys_for(r.kind)) }}
 <dl class="rp-grid">
     {% if r.kind == 'value' %}
     {# Valeur exacte : ses mesures propres (meilleur essai) ; > 0 = mieux que « rendement nul » pour le R², que le hasard pour l'IC. #}
     <div><dt>{{ t('rp_value_ic') }}</dt><dd class="pk-mono">{{ '%.3f' | format(r.value_ic) if r.value_ic is not none else '—' }}</dd></div>
     <div><dt>{{ t('rp_value_ic_holdout') }}</dt><dd class="pk-mono {{ ('pos' if r.holdout_ic > 0 else 'neg') if r.holdout_ic is not none else '' }}">{{ '%.3f' | format(r.holdout_ic) if r.holdout_ic is not none else '—' }}</dd></div>
     <div><dt>{{ t('rp_value_r2_holdout') }}</dt><dd class="pk-mono {{ ('pos' if r.holdout_r2 > 0 else 'neg') if r.holdout_r2 is not none else '' }}">{{ '%+.3f' | format(r.holdout_r2) if r.holdout_r2 is not none else '—' }}</dd></div>
+    {# Mesures secondaires du contrôle final (ADR 0032) : amplitude (pente, erreur absolue), gain par position avant frais. #}
+    {% for key in VALUE_EXTRA_KEYS %}{% set v = (headline.holdout or {}).get(key) if headline else none %}
+    <div><dt title="{{ m_labels.get('metric_' ~ key, key) }}">{{ m_labels.get('pm_' ~ key, key) }} · {{ t('rp_holdout_short') }}</dt><dd class="pk-mono">{{ v | pmfmt(key) }}</dd></div>
+    {% endfor %}
     {% endif %}
     <div><dt>{{ t('dq_col_status') }}</dt><dd>{{ r.status_label or r.status }}</dd></div>
     <div><dt>{{ t('rp_scheme') }}</dt><dd>{{ 'CPCV' if r.scheme == 'cpcv' else 'walk-forward' }}</dd></div>

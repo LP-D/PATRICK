@@ -32,6 +32,7 @@ TARGETS = ("^GSPC", "^VIX", "AAPL", "MSFT", "MC.PA", "TTE.PA", "EURUSD=X", "GC=F
 HORIZONS = (1, 5, 10)
 ALGOS = ("LightGBM", "XGBoost", "RandomForest", "CatBoost")
 LIVE_DAYS = 45
+VALUE_TARGETS = ("^GSPC", "MC.PA", "EURUSD=X")
 
 
 def _business_days(end: dt.date, n: int) -> list[dt.date]:
@@ -89,6 +90,34 @@ def build(db_path: str, today: dt.date | None = None, seed: int = 7) -> dict:
                 conn.execute("INSERT OR REPLACE INTO pooled_signal (target, horizon, n_runs, n_dates, auc, auc_run_mean, p_value, q_value, significant) "
                              "VALUES (?, ?, 1, 300, ?, ?, ?, ?, ?)",
                              (target, horizon, auc, auc, 0.01 if skill > 0.05 else 0.4, 0.04 if skill > 0.05 else 0.6, int(skill > 0.05)))
+        # Valeur exacte (ADR 0029 / 0032) : quelques champions `__val` et leur panneau (IC, R² hors échantillon, bon signe, couverture),
+        # pour voir l'onglet « Valeur exacte », la fiche d'un run de valeur et la colonne « Valeur exacte prévue » d'un actif.
+        for target in VALUE_TARGETS:
+            skill = rng.uniform(-0.02, 0.15)
+            for horizon in (5, 10):
+                run_id = f"demo_{target}_{horizon}_val".replace("^", "").replace("=", "_").replace(".", "_").replace("-", "_")
+                config = RunConfig.model_validate({"name": run_id, "objective": {"target_symbol": target, "horizons": [horizon], "task": "value"},
+                                                   "selection": {"criterion": "IC"}, "sampler": {"candidates": ["none"]},
+                                                   "models": {"algos": ["LightGBM", "XGBoost"]}})
+                label = config.objective.run_label()
+                trackdb.create_run(conn, run_id, label, horizon, "demo_snapshot", config.model_dump_json(), "demo", "demo", 42)
+                trial_id = trackdb.create_trial(conn, run_id, "GLOBAL", rng.choice(("LightGBM", "XGBoost")), "none", 8, "shap")
+                trackdb.mark_best_trial(conn, trial_id)
+
+                def value_scores(noise: float, skill: float = skill) -> dict:
+                    ic = skill + rng.uniform(-noise, noise)
+                    return {"IC": ic, "R2_oos": ic / 6 - 0.01 + rng.uniform(-noise, noise) / 4, "Hit_sign": 0.5 + ic / 3,
+                            "Cov80": 0.8 + rng.uniform(-0.08, 0.04), "MAE_skill": ic / 5, "MZ_slope": max(0.0, ic * 4 + rng.uniform(-0.2, 0.2)),
+                            "Gain_sign": ic / 100, "MAE": 0.02, "RMSE": 0.027, "AUC_dir": 0.5 + ic / 3, "Brier_up": 0.25 - ic / 40,
+                            "MCC_4cls": ic / 3, "Acc_dir_p": 0.5 + ic / 4, "AUC_ovr_4cls": 0.5 + ic / 3, "F1_dir": 0.48 + ic / 4}
+                for fold in range(1, 6):
+                    trackdb.add_fold_metrics(conn, trial_id, fold, "test", value_scores(0.04))
+                trackdb.add_fold_metrics(conn, trial_id, 0, "holdout", value_scores(0.02))
+                trackdb.finish_run(conn, run_id, "done", n_trials=12)
+                conn.execute("INSERT OR REPLACE INTO champion (target, horizon, run_id, trial_id, reason, holdout_f1_dir) "
+                             "VALUES (?, ?, ?, ?, 'first', NULL)", (label, horizon, run_id, trial_id))
+                conn.execute("INSERT OR REPLACE INTO prediction (trial_id, ts, split, y_true, y_pred, y_proba, p_up, y_value) "
+                             "VALUES (?, ?, 'live', NULL, 2, 0.4, 0.55, ?)", (trial_id, days[-1].isoformat(), rng.uniform(-0.02, 0.03)))
         conn.commit()
         relaunch_stats.record_duel(conn, job_id="demo_job_1", run_id="demo_AAPL_1", target="AAPL", horizon=1,
                                    decision={"decision": "challenger_wins", "criterion": "AUC_dir+Brier_up", "challenger_score": 0.58, "champion_score": 0.54})

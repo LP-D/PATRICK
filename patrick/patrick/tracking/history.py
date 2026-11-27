@@ -21,6 +21,7 @@ import sqlite3
 import numpy as np
 
 from patrick.config import defaults as D
+from patrick.config.target_label import is_value_label
 from patrick.data import quality as quality_module
 from patrick.selection import stability as stability_module
 from patrick.tracking import class_balance
@@ -520,6 +521,8 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10, w
     headline = _headline_for_trial(conn, best_trial["trial_id"]) if best_trial else {}
     return {
         "run": run,
+        # valeur exacte (`__val`) : la page lit son propre panneau (IC, R² hors échantillon, bon signe, couverture ; ADR 0032)
+        "kind": "value" if is_value_label(str(run.get("target") or "")) else "directional",
         "config": config,
         "scheme": scheme,
         "is_cpcv": is_cpcv,
@@ -617,6 +620,7 @@ def target_detail(conn: sqlite3.Connection, target: str, fdr_alpha: float = 0.10
             "benchmark_f1_dir": benchmark_by_run.get(run_id),
             "panel": metric_panel.panel((headline_by_run.get(run_id) or {}).get("test")),
             "holdout_panel": metric_panel.panel((headline_by_run.get(run_id) or {}).get("holdout")),
+            "value_panel": metric_panel.value_panel((headline_by_run.get(run_id) or {}).get("test")),
             "benchmark_mcc": benchmark_mcc_by_run.get(run_id),
             "class_balance": balance_by_run.get(run_id),
         })
@@ -633,6 +637,7 @@ def target_detail(conn: sqlite3.Connection, target: str, fdr_alpha: float = 0.10
 
     return {
         "target": target,
+        "kind": "value" if is_value_label(target) else "directional",
         "runs": run_rows,
         "n_runs": len(run_rows),
         "cumulative_trials": trackstats.count_cumulative_trials(conn, target),

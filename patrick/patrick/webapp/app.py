@@ -269,6 +269,9 @@ templates.env.globals["descriptive_horizons"] = D.DESCRIPTIVE_HORIZONS
 templates.env.globals["data_root_missing"] = paths.data_root_missing
 # Panneau de métriques d'un modèle (ADR 0023) : AUC de direction · Brier · MCC · bonne direction, partout et dans cet ordre.
 templates.env.globals["PANEL_KEYS"] = metric_panel.PANEL_KEYS
+templates.env.globals["VALUE_PANEL_KEYS"] = metric_panel.VALUE_PANEL_KEYS          # valeur exacte (ADR 0032)
+templates.env.globals["VALUE_EXTRA_KEYS"] = metric_panel.VALUE_EXTRA_KEYS
+templates.env.globals["panel_keys_for"] = metric_panel.keys_for
 templates.env.globals["panel_cells"] = metric_panel.cells
 templates.env.globals["panel_heads"] = metric_panel.heads
 templates.env.globals["panel_best"] = metric_panel.best_of
@@ -421,7 +424,8 @@ def _metric_labels(t) -> dict:
     """Traductions passées aux macros `fold_metrics_table` / `headline_metrics` (un macro importé ne voit pas `t()`)."""
     out = {k: t(f"m_{k}") if k not in ("more", "less") else t(f"rows_{k}") for k in _METRIC_LABEL_KEYS}
     out.update({f"metric_{m}": t(f"metric_{m}") for m in _METRIC_NAMES})
-    out.update({f"pm_{m}": t(f"pm_{m}") for m in metric_panel.PANEL_KEYS})
+    out.update({f"pm_{m}": t(f"pm_{m}") for m in (*metric_panel.PANEL_KEYS, *metric_panel.VALUE_PANEL_KEYS, *metric_panel.VALUE_EXTRA_KEYS)})
+    out.update({f"metric_{m}": t(f"metric_{m}") for m in (*metric_panel.VALUE_PANEL_KEYS, *metric_panel.VALUE_EXTRA_KEYS)})
     return out
 
 
@@ -519,7 +523,7 @@ def _profile_gallery(family: str = "ml") -> list[dict]:
     out = []
     for p in (dl_profiles.PROFILES if family == "dl" else training_profiles.PROFILES):
         patch = p.resolved_patch()
-        out.append({"key": p.key, "cost": p.cost, "needs": p.needs,
+        out.append({"key": p.key, "cost": p.cost, "needs": p.needs, "task": p.task,
                     "n_changes": sum(1 for k, v in patch.items() if base.get(k) != v)})
     return out
 
@@ -605,10 +609,20 @@ def launch_batches_fragment(request: Request, family: str = "ml"):
 
         evidence = {c["class"]: c for c in pooled_signal.class_summary(pooled_signal.load(conn))}
         symbols = [sym for items in groups.values() for sym, _ in items]
-        overview = launch_batches.overview(conn, family, symbols, data_health.depth_by_symbol_for_form(), utc_today(),
+        depths = data_health.depth_by_symbol_for_form()
+        overview = launch_batches.overview(conn, family, symbols, depths, utc_today(),
                                            sources=forms.TARGET_SOURCE_BY_SYMBOL, evidence=evidence)
-        top_signal = [] if family == "rl" else launch_batches.top_signal(
-            conn, [s for s in symbols if forms.TARGET_SOURCE_BY_SYMBOL.get(s) not in D.NON_TARGET_SOURCES])
+        tradable = [s for s in symbols if forms.TARGET_SOURCE_BY_SYMBOL.get(s) not in D.NON_TARGET_SOURCES]
+        top_signal = [] if family == "rl" else launch_batches.top_signal(conn, tradable)
+        # Valeur exacte (ADR 0032) : mêmes lots, comptés pour cet objectif, plus « là où la direction a un signal » et « déjà essayées
+        # dans l'autre famille ». Le RL n'a pas cet objectif.
+        value = None
+        if family != "rl":
+            value = launch_batches.overview(conn, family, symbols, depths, utc_today(), sources=forms.TARGET_SOURCE_BY_SYMBOL,
+                                            evidence=evidence, task="value")
+            value["signal"] = launch_batches.value_where_signal(conn, tradable, value["never"])
+            value["n_missing_pairs"] = sum(len(gaps) for gaps in value["missing"].values())
+            value["missing_horizons"] = sorted({h for gaps in value["missing"].values() for h in gaps})
     finally:
         conn.close()
     missing = overview["missing"]
@@ -616,7 +630,7 @@ def launch_batches_fragment(request: Request, family: str = "ml"):
         launch_batches.prewarm()           # l'analyse des runs conseillés (~70 s) se fait pendant que la page est lue, pas au clic
     return templates.TemplateResponse(
         request, "_launch_batches.html",
-        {"family": family, "by_class": overview["by_class"], "missing": missing, "top_signal": top_signal,
+        {"family": family, "by_class": overview["by_class"], "missing": missing, "top_signal": top_signal, "value": value,
          "missing_horizons": sorted({h for gaps in missing.values() for h in gaps}),
          "n_missing_pairs": sum(len(gaps) for gaps in missing.values()), **_i18n_context(request)},
     )
@@ -717,8 +731,7 @@ def _launch_page(request: Request, family: str, run_id: str | None, target: str 
         if chosen is None:
             raise HTTPException(status_code=404, detail="Profil d'entraînement inconnu.")
         view = training_profiles.apply_patch(view, chosen.resolved_patch())
-        applied = {"kind": "profile", "key": chosen.key,
-                   "warning": "prof_warn_equity" if chosen.needs == "equity" else None}
+        applied = {"kind": "profile", "key": chosen.key, "warnings": chosen.warnings}
     elif suggest and run_id:
         if family != "ml":
             raise HTTPException(status_code=404, detail="Suggestion de réentraînement indisponible pour cette famille.")
@@ -731,7 +744,7 @@ def _launch_page(request: Request, family: str, run_id: str | None, target: str 
         if found is None:
             raise HTTPException(status_code=404, detail="Suggestion de réentraînement introuvable pour ce run.")
         view = training_profiles.apply_patch(view, {k: v for k, v in found.patch.items() if k in view})
-        applied = {"kind": "suggest", "key": found.key, "run_id": run_id, "warning": None}
+        applied = {"kind": "suggest", "key": found.key, "run_id": run_id, "warnings": []}
     return _render_launch(request, view, [], duplicated_run_id=run_id if not applied else None, applied=applied, family=family)
 
 
@@ -1036,7 +1049,8 @@ async def create_run(request: Request):
     if only_missing:
         conn = trackdb.connect()
         try:
-            done_pairs = launch_batches.executed_pairs(conn, "dl" if form.get("family") == "dl" else "ml")
+            done_pairs = launch_batches.executed_pairs(conn, "dl" if form.get("family") == "dl" else "ml",
+                                                       "value" if form.get("task") == "value" else "direction")
         finally:
             conn.close()
     skipped: list[str] = []

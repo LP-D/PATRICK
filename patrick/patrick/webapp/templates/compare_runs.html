@@ -18,7 +18,7 @@
         <tr><th>{{ t('cmp_measure') }}</th>{% for run in runs %}<th><a href="/runs/{{ run.run_id }}/detail">{{ run.name }}</a></th>{% endfor %}</tr>
     </thead>
     <tbody>
-        <tr><th>{{ t('kind_col') }}</th>{% for run in runs %}<td>{% if '__alpha_' in (run.target or '') %}<span class="kind-badge kind-alpha">{{ t('kind_alpha') }}</span>{% else %}<span class="kind-badge kind-directional">{{ t('kind_directional') }}</span>{% endif %}</td>{% endfor %}</tr>
+        <tr><th>{{ t('kind_col') }}</th>{% for run in runs %}<td>{% if (run.target or '').endswith('__val') %}<span class="kind-badge kind-value">{{ t('kind_value') }}</span>{% elif '__alpha_' in (run.target or '') %}<span class="kind-badge kind-alpha">{{ t('kind_alpha') }}</span>{% else %}<span class="kind-badge kind-directional">{{ t('kind_directional') }}</span>{% endif %}</td>{% endfor %}</tr>
         <tr><th>{{ t('col_target') }}</th>{% for run in runs %}<td title="{{ run.target }}">{{ run.target | iname }}</td>{% endfor %}</tr>
         <tr><th>{{ t('cmp_horizons') }}</th>{% for run in runs %}<td>{{ run.horizons | join(', ') }} {{ t('cmp_days') }}</td>{% endfor %}</tr>
         <tr><th>{{ t('cmp_validation') }}</th>{% for run in runs %}<td>{{ 'CPCV' if run.scheme == 'cpcv' else 'Walk-forward' }}</td>{% endfor %}</tr>
@@ -31,6 +31,14 @@
         {% set best = panel_best(key, vals) %}
         <tr><th title="{{ m_labels.get('metric_' ~ key, key) }}">{{ m_labels.get('pm_' ~ key, key) }} · {{ m_labels['split_' ~ split] }}</th>{% for v in vals %}<td class="pk-mono{% if v is not none and v == best and vals | select('ne', none) | list | length > 1 %} pos{% endif %}">{{ v | pmfmt(key) }}</td>{% endfor %}</tr>
         {% endfor %}{% endfor %}
+        {# Valeur exacte (ADR 0032) : son propre panneau, dès qu'un des runs comparés en est un. #}
+        {% if runs | selectattr('kind', 'equalto', 'value') | list %}
+        {% for split, attr in (('test', 'value_panel'), ('holdout', 'holdout_value_panel')) %}{% for key in VALUE_PANEL_KEYS %}
+        {% set vals = [] %}{% for run in runs %}{% set _ = vals.append((run[attr] or {}).get(key)) %}{% endfor %}
+        {% set best = panel_best(key, vals) %}
+        <tr><th title="{{ m_labels.get('metric_' ~ key, key) }}">{{ m_labels.get('pm_' ~ key, key) }} · {{ m_labels['split_' ~ split] }}</th>{% for v in vals %}<td class="pk-mono{% if v is not none and v == best and vals | select('ne', none) | list | length > 1 %} pos{% endif %}">{{ v | pmfmt(key) }}</td>{% endfor %}</tr>
+        {% endfor %}{% endfor %}
+        {% endif %}
         <tr><th>{{ t('col_dm_p') }}</th>{% for run in runs %}<td>{{ '%.4f' | format(run.dm_p_value) if run.dm_p_value is not none else '—' }}</td>{% endfor %}</tr>
         <tr><th>{{ t('cmp_algos') }}</th>{% for run in runs %}<td>{{ run.algorithms | join(', ') if run.algorithms else '—' }}</td>{% endfor %}</tr>
         <tr><th>{{ t('cmp_samplers') }}</th>{% for run in runs %}<td>{{ run.samplers | join(', ') if run.samplers else '—' }}</td>{% endfor %}</tr>
