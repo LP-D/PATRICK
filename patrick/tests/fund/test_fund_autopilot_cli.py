@@ -223,3 +223,27 @@ def test_a_zero_max_models_means_no_cap_on_the_command_line(setup):
     conn = trackdb.connect()
     assert store.get_autopilot(conn, sid)["settings"]["max_models"] is None
     conn.close()
+
+
+def test_repair_previews_by_default_and_writes_only_with_apply(setup):
+    sid, runner = setup
+    run(runner, "autopilot-enable", "--strategy", sid)
+    run(runner, "autopilot-run", "--strategy", sid, "--today", "2026-01-15")
+    conn = trackdb.connect()
+    try:
+        before = len(systematic.list_rules(conn, sid))
+        rule = systematic.list_rules(conn, sid)[0]
+        systematic.create_rule(conn, sid, rule["name"], dict(rule["config"]))      # une règle en double, comme deux cycles simultanés
+    finally:
+        conn.close()
+
+    preview = run(runner, "repair", "--all", "--today", "2026-01-16")
+    assert "1 règle(s) en double" in preview and "aperçu" in preview
+
+    fixed = run(runner, "repair", "--strategy", sid, "--apply", "--today", "2026-01-16")
+    assert "Total corrigé : 1 règle(s) en double" in fixed
+    conn = trackdb.connect()
+    try:
+        assert len(systematic.list_rules(conn, sid)) == before                     # plus de double
+    finally:
+        conn.close()

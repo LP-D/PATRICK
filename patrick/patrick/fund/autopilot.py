@@ -403,6 +403,93 @@ def managed_rules(conn: sqlite3.Connection, strategy_id: str) -> list[dict]:
     return [r for r in systematic.list_rules(conn, strategy_id) if (r["config"].get("managed") or {}).get("by") == MANAGER]
 
 
+def duplicate_rules(conn: sqlite3.Connection, strategy_id: str) -> list[tuple[dict, dict]]:
+    """`[(règle gardée, règle en trop)]` : règles actives du pilote sur une même cellule (cible, horizon). La plus ancienne est gardée.
+    Deux cycles simultanés en ont créé 74 la nuit du 16/11/2026, avant le verrou entre processus (24/11) : le cycle range les règles
+    actives par cellule et n'en voyait qu'une, mais les appliquait toutes -- chaque exemplaire ouvrait sa propre position."""
+    kept: dict[tuple, dict] = {}
+    out: list[tuple[dict, dict]] = []
+    for rule in managed_rules(conn, strategy_id):                   # les plus anciennes d'abord
+        if "retired_on" in rule["config"]:
+            continue
+        key = (rule["config"]["managed"]["target"], rule["config"]["managed"]["horizon"])
+        if key in kept:
+            out.append((kept[key], rule))
+        else:
+            kept[key] = rule
+    return out
+
+
+def drop_duplicate_rules(conn: sqlite3.Connection, strategy_id: str) -> list[dict]:
+    """Supprime chaque règle en trop (`duplicate_rules`) avec ses ordres : ses positions doublaient celles de la règle gardée (même
+    modèle, mêmes signaux), leur P&L était compté deux fois. Renvoie une ligne par règle supprimée."""
+    out: list[dict] = []
+    for keep, extra in duplicate_rules(conn, strategy_id):
+        meta = extra["config"]["managed"]
+        orders = systematic.purge_rule(conn, extra["rule_id"])
+        logger.info("règle du pilote en double supprimée : %s (%s h%s, gardée : %s), %d ordre(s)", extra["rule_id"], meta["target"],
+                    meta["horizon"], keep["rule_id"], orders)
+        out.append({"rule_id": extra["rule_id"], "kept": keep["rule_id"], "target": meta["target"], "horizon": meta["horizon"],
+                    "trial_id": extra["config"]["trial_id"], "orders": orders})
+    return out
+
+
+def repair(conn: sqlite3.Connection, strategy_id: str, today: dt.date | None = None, *, apply: bool = False,
+           lock_timeout_s: float | None = None) -> dict:
+    """Répare un fonds piloté sans attendre le cycle de la nuit : règles en double (`duplicate_rules`) et positions orphelines des règles
+    retirées sans plan (`systematic.orphan_closes`). `apply=False` : aperçu, rien n'est écrit. Rend `{strategy_id, name, duplicates:
+    [{rule_id, kept, target, horizon, orders, pnl}], orphans: [{rule_id, target, horizon, position_id, opened, close_on}],
+    closed, pending, refused}`. Sous le verrou du cycle (jamais en même temps qu'un cycle)."""
+    today = service._today(today)
+    strategy = store.get_strategy(conn, strategy_id)
+    if strategy is None:
+        raise store.FundError("stratégie introuvable")
+    with _RUN_LOCK, _cycle_lock(conn, CYCLE_LOCK_TIMEOUT_S if lock_timeout_s is None else lock_timeout_s):
+        pairs = duplicate_rules(conn, strategy_id)
+        pnl_by_rule: dict[str, float] = {}
+        if pairs:
+            try:                                                   # une seule valorisation du fonds pour toutes les règles en trop
+                snapshot = service.strategy_snapshot(conn, strategy, today)
+                owner = insight._position_rules(snapshot["orders"])
+                for p in snapshot["positions"]:
+                    rule_id = owner.get(p["position_id"])
+                    if rule_id:
+                        pnl_by_rule[rule_id] = pnl_by_rule.get(rule_id, 0.0) + float(p["pnl"] or 0.0)
+            except Exception as exc:  # noqa: BLE001 -- cotations indisponibles : l'aperçu dit les ordres sans montant
+                logger.info("valorisation impossible pour l'aperçu de la réparation : %s: %s", type(exc).__name__, exc)
+        duplicates = []
+        for keep, extra in pairs:
+            meta = extra["config"]["managed"]
+            prefix = f"{systematic.NOTE_PREFIX}:{extra['rule_id']}:"
+            n_orders = conn.execute("SELECT COUNT(*) FROM fund_order WHERE strategy_id = ? AND substr(note, 1, ?) = ?",
+                                    (strategy_id, len(prefix), prefix)).fetchone()[0]
+            duplicates.append({"rule_id": extra["rule_id"], "kept": keep["rule_id"], "target": meta["target"], "horizon": meta["horizon"],
+                               "orders": int(n_orders), "pnl": pnl_by_rule.get(extra["rule_id"])})
+        if apply:
+            for item in duplicates:
+                item["orders"] = systematic.purge_rule(conn, item["rule_id"])
+        orphans, closed, pending, refused = [], 0, 0, []
+        for rule in managed_rules(conn, strategy_id):
+            if "retired_on" not in rule["config"]:
+                continue
+            try:
+                systematic.plan(conn, rule)
+                continue                                           # le plan se calcule : le cycle ferme ses positions lui-même
+            except store.FundError:
+                pass
+            meta = rule["config"]["managed"]
+            for item in systematic.orphan_closes(conn, rule):
+                orphans.append({"rule_id": rule["rule_id"], "target": meta["target"], "horizon": meta["horizon"],
+                                "position_id": item["request"]["position_id"], "close_on": item["requested"]})
+            if apply:
+                result = systematic.apply(conn, rule["rule_id"], today)
+                closed += len(result["placed"])
+                pending += len(result["pending"])
+                refused += [{"target": meta["target"], "horizon": meta["horizon"], **r} for r in result["refused"]]
+    return {"strategy_id": strategy_id, "name": strategy["name"], "duplicates": duplicates, "orphans": orphans, "applied": apply,
+            "closed": closed, "pending": pending, "refused": refused}
+
+
 def _purge_previous_models(conn: sqlite3.Connection, strategy_id: str, key: tuple, trial_id: int,
                            today: dt.date | None = None) -> list[dict]:
     """Un nouveau modèle prend la cellule `key` (cible, horizon) : les règles du pilote qui y rejouaient un AUTRE modèle (active
@@ -489,6 +576,8 @@ def _run(conn: sqlite3.Connection, strategy_id: str, today: dt.date | None) -> d
                     "refused": [],
                     "placed": 0, "pending": 0}
 
+    report["deduplicated"] = drop_duplicate_rules(conn, strategy_id)
+    report["orphans_closed"] = 0
     active: dict[tuple, dict] = {}
     for rule in managed_rules(conn, strategy_id):
         if "retired_on" not in rule["config"]:
@@ -533,6 +622,8 @@ def _run(conn: sqlite3.Connection, strategy_id: str, today: dt.date | None) -> d
             continue
         report["placed"] += len(result["placed"])
         report["pending"] += len(result["pending"])
+        if result.get("orphan"):                                   # retirée sans plan : fermetures de repli (`systematic.orphan_closes`)
+            report["orphans_closed"] += len(result["placed"])
         report["refused"] += [{"target": meta["target"], "horizon": meta["horizon"], **r} for r in result["refused"]]
     report["excluded"] = plan["excluded_summary"]
     report["halted"] = halted

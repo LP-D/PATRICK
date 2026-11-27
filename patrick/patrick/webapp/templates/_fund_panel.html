@@ -278,8 +278,11 @@
 </div>
 {% endif %}
 {% if insight.replacements %}
-<h3>{{ t('fund_repl_title') }} <span class="hint">({{ insight.replacements | length }})</span></h3>
+{% set rt = insight.replaced_total %}
+<h3>{{ t('fund_repl_title') }} <span class="hint">({{ rt.n if rt else insight.replacements | length }})</span></h3>
 <p class="hint">{{ t('fund_repl_hint') }}</p>
+{# Ce que le P&L affiché ne contient plus (audit du 27/11) : sans ce total, l'historique réécrit se lisait comme un historique réel. #}
+{% if rt and rt.pnl is not none %}<p class="banner" role="note">{{ t('fund_repl_total', pnl=(rt.pnl | eur), n=rt.n, orders=rt.orders) }}</p>{% endif %}
 <div class="table-scroll">
   <table class="data-table">
     <thead><tr><th>{{ t('fund_repl_col_when') }}</th><th>{{ t('fund_repl_col_rule') }}</th><th>{{ t('fund_repl_col_models') }}</th>
@@ -366,7 +369,12 @@
   </details>
   {% endif %}
   {% if autopilot.rules %}
-  <h4>{{ t('fund_auto_rules_title') }} <span class="hint">({{ autopilot.rules | length }})</span></h4>
+  {# Règles actives d'abord ; les retirées (qui ne font que finir de fermer, ou plus rien) sont repliées : 262 sur 287 pour un fonds au 27/11. #}
+  {% set active_rules = autopilot.rules | rejectattr('config.retired_on') | list %}
+  {% set retired_rules = autopilot.rules | selectattr('config.retired_on') | list %}
+  <h4>{{ t('fund_auto_rules_title') }} <span class="hint">({{ t('fund_auto_rules_count', active=active_rules | length, retired=retired_rules | length) }})</span></h4>
+  {% for group in (active_rules, retired_rules) %}{% if group %}
+  {% if loop.index == 2 %}<details class="fund-auto-retired"><summary>{{ t('fund_auto_retired_toggle', n=group | length) }}</summary>{% endif %}
   <div class="table-scroll">
     <table class="data-table fund-auto-rules">
       <thead>
@@ -374,7 +382,7 @@
             <th class="num pk-mono">{{ t('fund_rule_col_size') }}</th><th class="num pk-mono">{{ t('fund_rule_col_orders') }}</th><th></th></tr>
       </thead>
       <tbody>
-        {% for r in autopilot.rules %}{% set c = r.config %}
+        {% for r in group %}{% set c = r.config %}
         <tr class="fund-auto-rule">
           <td class="pk-mono">{% if r.model %}<span title="{{ r.model.target }}">{{ r.model.target | iname }}</span> h{{ r.model.horizon }} · {{ r.model.algo }}{% else %}{{ r.name }}{% endif %}</td>
           <td><span class="instr" title="{{ c.instrument.symbol }}">{{ c.instrument.symbol | iname(none, c.instrument.kind) }}</span></td>
@@ -386,6 +394,8 @@
       </tbody>
     </table>
   </div>
+  {% if loop.index == 2 %}</details>{% endif %}
+  {% endif %}{% endfor %}
   {% endif %}
 </section>
 

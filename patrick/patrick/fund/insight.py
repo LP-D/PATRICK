@@ -151,6 +151,20 @@ def log_replacement(conn: sqlite3.Connection, rule: dict, new_trial_id: int, n_o
         return False
 
 
+def replacement_totals(conn: sqlite3.Connection, strategy_id: str) -> dict:
+    """`{n, orders, pnl, n_valued}` sur TOUT le journal (pas seulement les lignes affichées) : ce que les remplacements ont retiré du fonds.
+    Le P&L affiché d'un fonds ne contient plus celui des modèles remplacés (décision du 13/11) : ce total dit de combien il en diffère
+    (sur la vraie base au 27/11 : 491 remplacements, −768 421 € retirés, le P&L affiché en est embelli d'autant). `pnl` : None si aucune
+    ligne n'a de montant."""
+    try:
+        n, orders, pnl, valued = conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(n_orders), 0), SUM(pnl_removed), COUNT(pnl_removed) FROM fund_replacement WHERE strategy_id = ?",
+            (strategy_id,)).fetchone()
+    except sqlite3.Error:
+        return {"n": 0, "orders": 0, "pnl": None, "n_valued": 0}
+    return {"n": int(n), "orders": int(orders), "pnl": None if pnl is None else float(pnl), "n_valued": int(valued)}
+
+
 def replacements(conn: sqlite3.Connection, strategy_id: str, limit: int = 50) -> list[dict]:
     """Les remplacements de modèle d'une stratégie, le plus récent d'abord."""
     try:

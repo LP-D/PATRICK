@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from test_fund_selection import World
 
-from patrick.fund import autopilot, store
+from patrick.fund import autopilot, store, systematic
 from patrick.tracking import db as trackdb
 from patrick.webapp.app import app
 
@@ -59,3 +59,20 @@ def test_an_empty_strategy_shows_none_of_the_reading_blocks(client):
     assert panel.status_code == 200
     for text in ("vient le résultat", "Témoins : les mêmes ordres", "Modèles remplacés"):
         assert text not in panel.text
+
+
+def test_the_panel_totals_the_pnl_removed_by_replacements_and_folds_the_retired_rules(client, tmp_path, monkeypatch):
+    sid = _piloted(tmp_path, monkeypatch)
+    conn = trackdb.connect(str(tmp_path / "patrick.db"))
+    try:
+        conn.execute("UPDATE fund_replacement SET pnl_removed = -1234.5 WHERE strategy_id = ?", (sid,))
+        conn.commit()
+        rule = next(r for r in systematic.list_rules(conn, sid) if (r["config"].get("managed") or {}).get("target") == "^GSPC")
+        systematic.retire_rule(conn, rule["rule_id"], "2026-01-16")
+    finally:
+        conn.close()
+
+    panel = client.get(f"/api/fund/strategies/{sid}/panel").text
+
+    assert "P&amp;L affiché sans les modèles remplacés" in panel and "1 remplacement(s)" in panel
+    assert "1 active(s), 1 retirée(s)" in panel and 'class="fund-auto-retired"' in panel and "Règles retirées (1)" in panel

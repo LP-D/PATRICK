@@ -822,6 +822,50 @@ def _close_pair(conn: sqlite3.Connection, item: dict, today: dt.date) -> list[in
     return [first["order_id"], second["order_id"]]
 
 
+def open_positions(conn: sqlite3.Connection, rule: dict) -> list[dict]:
+    """Positions que la règle a ouvertes (ordre d'ouverture automatique) et que rien n'a refermées, pas même un ordre manuel :
+    `{position_id, opened (AAAA-MM-JJ), side}`, les plus anciennes d'abord."""
+    prefix = f"{NOTE_PREFIX}:{rule['rule_id']}:"
+    opens = conn.execute("SELECT position_id, ts, side FROM fund_order WHERE strategy_id = ? AND action = 'open' AND substr(note, 1, ?) = ? "
+                         "ORDER BY ts, order_id", (rule["strategy_id"], len(prefix), prefix)).fetchall()
+    if not opens:
+        return []
+    closed: set[str] = set()
+    ids = [row[0] for row in opens]
+    for chunk in _chunks(ids):
+        closed.update(row[0] for row in conn.execute(
+            f"SELECT DISTINCT position_id FROM fund_order WHERE strategy_id = ? AND action = 'close' "
+            f"AND position_id IN ({','.join('?' for _ in chunk)})", (rule["strategy_id"], *chunk)))
+    return [{"position_id": pid, "opened": str(ts)[:10], "side": side} for pid, ts, side in opens if pid not in closed]
+
+
+def orphan_closes(conn: sqlite3.Connection, rule: dict) -> list[dict]:
+    """Plan de repli d'une règle RETIRÉE dont le plan ne se calcule plus : le run de son modèle a été élagué après un duel perdu, ses
+    prédictions avec, et `plan` lève « aucun signal ». Sans ce repli, ses positions ouvertes ne se refermaient jamais (247 positions le
+    2026-11-27, ouvertes depuis fin octobre, jusqu'à 1,8 fois le capital d'un fonds).
+
+    Chaque position encore ouverte se ferme à l'échéance qu'aurait donnée le dernier signal avant le retrait : jour du retrait + 1 jour
+    + `sessions` séances (règle à l'horizon), ou le lendemain du retrait (tenue au signal), jamais avant l'échéance de son ouverture.
+    Pourquoi pas l'échéance de l'ouverture seule : tant que le plan se calculait, toute fermeture échue était passée ; une position encore
+    ouverte au retrait était donc renouvelée (ou à échoir) à ce moment-là. Mêmes éléments que `plan` (`reason` = `orphan`) ; une règle
+    d'alpha ferme ses deux jambes séparément."""
+    cfg = rule["config"]
+    retired = cfg.get("retired_on")
+    if not retired:
+        return []
+    sessions = int(cfg["hold"]["sessions"]) if cfg["hold"]["mode"] == "horizon" and cfg["hold"].get("sessions") else 0
+    after_retired = pd.Timestamp(retired) + pd.Timedelta(days=1) + pd.offsets.BDay(sessions)
+    out: list[dict] = []
+    for pos in open_positions(conn, rule):
+        due = max(pd.Timestamp(pos["opened"]) + pd.offsets.BDay(max(sessions, 1)), after_retired)
+        requested = due.date().isoformat()
+        note = f"{NOTE_PREFIX}:{rule['rule_id']}:{pos['position_id']}:close_orphan"
+        out.append({"signal": retired, "action": "close", "side": pos["side"], "score": None, "requested": requested, "note": note,
+                    "reason": "orphan", "request": {"strategy_id": rule["strategy_id"], "action": "close", "position_id": pos["position_id"],
+                                                    "date": requested, "note": note}})
+    return out
+
+
 def apply(conn: sqlite3.Connection, rule_id: str, today: dt.date | None = None) -> dict:
     """Place les ordres de la règle qui n'existent pas encore.
 
@@ -834,8 +878,14 @@ def apply(conn: sqlite3.Connection, rule_id: str, today: dt.date | None = None) 
     if rule is None:
         raise store.FundError("règle introuvable")
     today = service._today(today)
-    planned = plan(conn, rule)
-    hedged = "hedge" in rule["config"]
+    orphan = False
+    try:
+        planned = plan(conn, rule)
+    except store.FundError:
+        if "retired_on" not in rule["config"]:
+            raise                                    # une règle active sans signal reste une erreur (le pilote la retirera)
+        planned, orphan = orphan_closes(conn, rule), True   # retirée et sans plan : ses positions se ferment quand même
+    hedged = "hedge" in rule["config"] and not orphan
     prefix = f"{NOTE_PREFIX}:{rule_id}:"
     existing = {o["note"] for o in store.list_orders(conn, rule["strategy_id"])
                 if o.get("note") and o["note"].startswith(prefix)}
@@ -872,6 +922,9 @@ def apply(conn: sqlite3.Connection, rule_id: str, today: dt.date | None = None) 
             continue
         if item["action"] == "open":
             unopened.add(req["position_id"])
+    if orphan:
+        result["orphan"] = True
+        return result
     if rule["config"]["signal"]["mode"] == "combo":
         from patrick.fund import combo
         result["frozen"] = combo.freeze(conn, rule, today)         # les séances passées ne se recalculeront plus jamais

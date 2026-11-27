@@ -464,6 +464,12 @@ FUND_STRINGS: dict[str, dict[str, str]] = {
     "fund_repl_title": _s("Modèles remplacés", "Replaced models"),
     "fund_repl_hint": _s("Quand un meilleur modèle prend une cellule, les ordres de l'ancien sont supprimés : son P&L sort du fonds. Cette liste en garde la trace.",
                          "When a better model takes a cell, the old one's orders are deleted: its P&L leaves the fund. This list keeps the trace."),
+    "fund_repl_total": _s("P&L affiché sans les modèles remplacés : {pnl} retirés au total ({n} remplacement(s), {orders} ordre(s) supprimé(s)). "
+                          "Avec eux, le P&L du fonds serait d'autant différent.",
+                          "Displayed P&L without the replaced models: {pnl} removed in total ({n} replacement(s), {orders} order(s) deleted). "
+                          "With them, the fund's P&L would differ by that much."),
+    "fund_auto_rules_count": _s("{active} active(s), {retired} retirée(s)", "{active} active, {retired} retired"),
+    "fund_auto_retired_toggle": _s("Règles retirées ({n})", "Retired rules ({n})"),
     "fund_repl_col_when": _s("Date", "Date"),
     "fund_repl_col_rule": _s("Règle", "Rule"),
     "fund_repl_col_models": _s("Modèle", "Model"),
